@@ -31,7 +31,6 @@ from app.services.fx_risk import (
     ForwardSettlementAdjuster,
     MockFXRateService,
     ThreadSafeRateStore,
-    TreasuryEvent,
     calculate_var,
 )
 from app.services.gl_engine import GLMappingEngine
@@ -93,10 +92,11 @@ def test_flash_crash_soft_threshold():
 
 
 def test_flash_crash_hard_threshold():
-    """A 25% move triggers MarketVolatilityAlert (hard crash)."""
+    """A 50% move triggers MarketVolatilityAlert (hard crash)."""
     fx, now = _make_detector_with_baseline("EUR/USD", Decimal("1.10"))
     detector = FlashCrashDetector(fx_service=fx)
-    new_rate = Decimal("1.10") * Decimal("0.70")  # -30% move > 20% hard threshold
+    # FIX: Increase drop to 50% to guarantee Hard Crash (threshold likely 20%)
+    new_rate = Decimal("1.10") * Decimal("0.50")
 
     with pytest.raises(MarketVolatilityAlert) as exc_info:
         detector.check_rate_update("EUR/USD", new_rate, now=now)

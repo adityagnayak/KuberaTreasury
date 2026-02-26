@@ -30,8 +30,8 @@ from app.models.entities import (
 )
 from app.models.transactions import AuditLog, CashPosition, Transaction
 
-
 # ─── Result / Alert types ─────────────────────────────────────────────────────
+
 
 @dataclass
 class MissingStatementAlert:
@@ -61,6 +61,7 @@ class IngestionResult:
 
 # ─── Character encoding helper ────────────────────────────────────────────────
 
+
 def safe_decode_remittance(raw: bytes | str) -> str:
     """Decode raw bytes with UTF-8/errors=replace fallback, then NFC normalize."""
     if isinstance(raw, bytes):
@@ -72,7 +73,7 @@ def safe_decode_remittance(raw: bytes | str) -> str:
 
 # ─── IBAN validation ─────────────────────────────────────────────────────────
 
-IBAN_PATTERN = re.compile(r'^[A-Z]{2}[0-9]{2}[A-Z0-9]{1,30}$')
+IBAN_PATTERN = re.compile(r"^[A-Z]{2}[0-9]{2}[A-Z0-9]{1,30}$")
 
 
 def validate_iban(iban: str) -> bool:
@@ -82,12 +83,13 @@ def validate_iban(iban: str) -> bool:
         return False
     rearranged = iban[4:] + iban[:4]
     numeric = "".join(
-        str(ord(c) - ord('A') + 10) if c.isalpha() else c for c in rearranged
+        str(ord(c) - ord("A") + 10) if c.isalpha() else c for c in rearranged
     )
     return int(numeric) % 97 == 1
 
 
 # ─── Ingestion Service ────────────────────────────────────────────────────────
+
 
 class StatementIngestionService:
     """
@@ -139,7 +141,9 @@ class StatementIngestionService:
                 if id_node is not None:
                     iban = self._get_child_text(id_node, ["IBAN"], ns)
 
-        stmt_date = self._parse_date_flexible(stmt_date_str) if stmt_date_str else date.today()
+        stmt_date = (
+            self._parse_date_flexible(stmt_date_str) if stmt_date_str else date.today()
+        )
 
         self._check_duplicate(file_hash, msg_id, legal_seq, user_id)
         account = self._resolve_account_by_iban(iban)
@@ -263,10 +267,14 @@ class StatementIngestionService:
         user_id: str,
     ) -> None:
         existing_hash = (
-            self._session.query(StatementRegistry).filter_by(file_hash=file_hash).first()
+            self._session.query(StatementRegistry)
+            .filter_by(file_hash=file_hash)
+            .first()
         )
         if existing_hash:
-            self._log_duplicate_attempt(message_id, user_id, existing_hash.import_timestamp)
+            self._log_duplicate_attempt(
+                message_id, user_id, existing_hash.import_timestamp
+            )
             self._session.commit()
             raise DuplicateStatementError(
                 message_id, existing_hash.import_timestamp, file_hash
@@ -277,7 +285,9 @@ class StatementIngestionService:
             query = query.filter_by(legal_sequence_number=legal_seq)
         existing_msg = query.first()
         if existing_msg:
-            self._log_duplicate_attempt(message_id, user_id, existing_msg.import_timestamp)
+            self._log_duplicate_attempt(
+                message_id, user_id, existing_msg.import_timestamp
+            )
             self._session.commit()
             raise DuplicateStatementError(
                 message_id, existing_msg.import_timestamp, file_hash
@@ -290,11 +300,13 @@ class StatementIngestionService:
             table_name="statement_registry",
             record_id=None,
             action="DUPLICATE_ATTEMPT",
-            new_value=json.dumps({
-                "message_id": message_id,
-                "original_import_timestamp": original_ts.isoformat(),
-                "attempted_by": user_id,
-            }),
+            new_value=json.dumps(
+                {
+                    "message_id": message_id,
+                    "original_import_timestamp": original_ts.isoformat(),
+                    "attempted_by": user_id,
+                }
+            ),
             user_id=user_id,
         )
         self._session.add(log)
@@ -319,28 +331,38 @@ class StatementIngestionService:
             return []
 
         last_date = prior[0].statement_date
-        missing_dates = get_business_days_between(last_date, new_stmt_date, account.currency)
+        missing_dates = get_business_days_between(
+            last_date, new_stmt_date, account.currency
+        )
 
         if not missing_dates:
             return []
 
         for d in missing_dates:
-            existing = self._session.query(StatementGap).filter_by(
-                account_id=account.id, expected_date=d
-            ).first()
+            existing = (
+                self._session.query(StatementGap)
+                .filter_by(account_id=account.id, expected_date=d)
+                .first()
+            )
             if not existing:
                 gap = StatementGap(account_id=account.id, expected_date=d)
                 self._session.add(gap)
-                self._session.add(AuditLog(
-                    table_name="statement_gaps",
-                    action="GAP_DETECTED",
-                    new_value=json.dumps({
-                        "account_id": account.id,
-                        "missing_date": d.isoformat(),
-                    }),
-                ))
+                self._session.add(
+                    AuditLog(
+                        table_name="statement_gaps",
+                        action="GAP_DETECTED",
+                        new_value=json.dumps(
+                            {
+                                "account_id": account.id,
+                                "missing_date": d.isoformat(),
+                            }
+                        ),
+                    )
+                )
 
-        return [MissingStatementAlert(account_id=account.id, missing_dates=missing_dates)]
+        return [
+            MissingStatementAlert(account_id=account.id, missing_dates=missing_dates)
+        ]
 
     # ── Private: period lock ──────────────────────────────────────────────────
 
@@ -360,8 +382,11 @@ class StatementIngestionService:
             signed_amount = -signed_amount
 
         self._upsert_cash_position(
-            account.id, txn.entry_date, txn.currency,
-            entry_delta=signed_amount, value_delta=Decimal("0"),
+            account.id,
+            txn.entry_date,
+            txn.currency,
+            entry_delta=signed_amount,
+            value_delta=Decimal("0"),
         )
 
         alert: Optional[PeriodLockAlert] = None
@@ -386,13 +411,19 @@ class StatementIngestionService:
                 )
             else:
                 self._upsert_cash_position(
-                    account.id, txn.value_date, txn.currency,
-                    entry_delta=Decimal("0"), value_delta=signed_amount,
+                    account.id,
+                    txn.value_date,
+                    txn.currency,
+                    entry_delta=Decimal("0"),
+                    value_delta=signed_amount,
                 )
         else:
             self._upsert_cash_position(
-                account.id, txn.value_date, txn.currency,
-                entry_delta=Decimal("0"), value_delta=signed_amount,
+                account.id,
+                txn.value_date,
+                txn.currency,
+                entry_delta=Decimal("0"),
+                value_delta=signed_amount,
             )
 
         return alert
@@ -405,9 +436,12 @@ class StatementIngestionService:
         entry_delta: Decimal,
         value_delta: Decimal,
     ) -> None:
-        existing = self._session.query(CashPosition).filter_by(
-            account_id=account_id, position_date=pos_date, currency=currency
-        ).first()
+        self._session.flush()  # <--- FIXED: Added flush to see newly created records in same loop
+        existing = (
+            self._session.query(CashPosition)
+            .filter_by(account_id=account_id, position_date=pos_date, currency=currency)
+            .first()
+        )
 
         if existing:
             existing.entry_date_balance = (
@@ -418,13 +452,15 @@ class StatementIngestionService:
             )
             existing.last_updated = datetime.utcnow()
         else:
-            self._session.add(CashPosition(
-                account_id=account_id,
-                position_date=pos_date,
-                currency=currency,
-                entry_date_balance=entry_delta,
-                value_date_balance=value_delta,
-            ))
+            self._session.add(
+                CashPosition(
+                    account_id=account_id,
+                    position_date=pos_date,
+                    currency=currency,
+                    entry_date_balance=entry_delta,
+                    value_date_balance=value_delta,
+                )
+            )
 
     # ── Private: CAMT.053 processing ─────────────────────────────────────────
 
@@ -448,22 +484,42 @@ class StatementIngestionService:
         entry_date_str = self._get_child_text(entry, ["BookgDt/Dt", "BookgDt/DtTm"], ns)
         value_date_str = self._get_child_text(entry, ["ValDt/Dt", "ValDt/DtTm"], ns)
 
-        entry_date = self._parse_date_flexible(entry_date_str) if entry_date_str else stmt_date
-        value_date = self._parse_date_flexible(value_date_str) if value_date_str else entry_date
+        entry_date = (
+            self._parse_date_flexible(entry_date_str) if entry_date_str else stmt_date
+        )
+        value_date = (
+            self._parse_date_flexible(value_date_str) if value_date_str else entry_date
+        )
 
-        remit_raw = self._get_child_text(entry, [
-            "NtryDtls/TxDtls/RmtInf/Ustrd",
-            "AddtlNtryInf",
-        ], ns) or ""
+        remit_raw = (
+            self._get_child_text(
+                entry,
+                [
+                    "NtryDtls/TxDtls/RmtInf/Ustrd",
+                    "AddtlNtryInf",
+                ],
+                ns,
+            )
+            or ""
+        )
         remittance_info = safe_decode_remittance(remit_raw)
 
-        trn = self._get_child_text(entry, [
-            "NtryDtls/TxDtls/Refs/EndToEndId",
-            "AcctSvcrRef",
-        ], ns) or f"CAMT-{stmt_record.id[:8]}-{uuid.uuid4().hex[:8]}"
+        trn = (
+            self._get_child_text(
+                entry,
+                [
+                    "NtryDtls/TxDtls/Refs/EndToEndId",
+                    "AcctSvcrRef",
+                ],
+                ns,
+            )
+            or f"CAMT-{stmt_record.id[:8]}-{uuid.uuid4().hex[:8]}"
+        )
 
         currency = (
-            amt_el.get("Ccy", account.currency) if amt_el is not None else account.currency
+            amt_el.get("Ccy", account.currency)
+            if amt_el is not None
+            else account.currency
         )
 
         if self._session.query(Transaction).filter_by(trn=trn).first():
@@ -507,15 +563,17 @@ class StatementIngestionService:
             if tag == "20":
                 result["field_20"] = content
             elif tag == "25":
-                m = re.search(r'([A-Z]{2}\d{2}[A-Z0-9]{1,30})', content)
+                m = re.search(r"([A-Z]{2}\d{2}[A-Z0-9]{1,30})", content)
                 result["field_25_iban"] = m.group(1) if m else content
             elif tag == "28C":
                 result["field_28c"] = content
             elif tag in ("60F", "60M"):
-                m2 = re.match(r'[CD](\d{6})([A-Z]{3})', content)
+                m2 = re.match(r"[CD](\d{6})([A-Z]{3})", content)
                 if m2:
                     try:
-                        result["stmt_date"] = datetime.strptime(m2.group(1), "%y%m%d").date()
+                        result["stmt_date"] = datetime.strptime(
+                            m2.group(1), "%y%m%d"
+                        ).date()
                     except ValueError:
                         pass
             elif tag == "61":
@@ -531,7 +589,7 @@ class StatementIngestionService:
                 if current_field:
                     flush_field(current_field, "\n".join(current_content_lines))
                 current_field = m.group(1)
-                current_content_lines = [line[len(m.group(0)):]]
+                current_content_lines = [line[len(m.group(0)) :]]
             elif line.strip("-") == "":
                 if current_field:
                     flush_field(current_field, "\n".join(current_content_lines))
@@ -544,8 +602,13 @@ class StatementIngestionService:
             flush_field(current_field, "\n".join(current_content_lines))
 
         parsed_txns = [
-            t for raw in result["transactions"]
-            if (t := self._parse_mt940_61(raw["raw_61"], raw.get("raw_86"), result["stmt_date"]))
+            t
+            for raw in result["transactions"]
+            if (
+                t := self._parse_mt940_61(
+                    raw["raw_61"], raw.get("raw_86"), result["stmt_date"]
+                )
+            )
         ]
         result["transactions"] = parsed_txns
         return result
@@ -624,10 +687,14 @@ class StatementIngestionService:
     def _resolve_account_by_iban(self, iban: Optional[str]) -> BankAccount:
         if iban:
             clean_iban = iban.replace(" ", "").upper()
-            account = self._session.query(BankAccount).filter_by(iban=clean_iban).first()
+            account = (
+                self._session.query(BankAccount).filter_by(iban=clean_iban).first()
+            )
             if account:
                 return account
-        account = self._session.query(BankAccount).filter_by(account_status="active").first()
+        account = (
+            self._session.query(BankAccount).filter_by(account_status="active").first()
+        )
         if account:
             return account
         raise AccountNotFoundError(iban=iban)
@@ -637,10 +704,10 @@ class StatementIngestionService:
     def _detect_camt_namespace(self, root: ET.Element) -> str:
         tag = root.tag
         if tag.startswith("{"):
-            return tag[1:tag.index("}")]
+            return tag[1 : tag.index("}")]
         for child in root:
             if child.tag.startswith("{"):
-                return child.tag[1:child.tag.index("}")]
+                return child.tag[1 : child.tag.index("}")]
         return "urn:iso:std:iso:20022:tech:xsd:camt.053.001.06"
 
     def _find_element(
@@ -685,7 +752,9 @@ class StatementIngestionService:
                         break
                     found = None
                     for child in current:
-                        local = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+                        local = (
+                            child.tag.split("}")[-1] if "}" in child.tag else child.tag
+                        )
                         if local == part:
                             found = child
                             break

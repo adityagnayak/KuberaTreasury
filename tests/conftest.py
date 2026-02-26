@@ -4,9 +4,9 @@ NexusTreasury — Shared pytest fixtures for all test phases.
 
 from __future__ import annotations
 
+import base64
 import os
 import secrets
-import base64
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Generator
@@ -15,6 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool  # <--- FIXED: Added import
 
 # ─── Environment setup (before any app imports) ───────────────────────────────
 
@@ -38,22 +39,23 @@ from app.models.instruments import PositionLock
 from app.models.mandates import KYCDocument, Mandate
 from app.models.payments import Payment, PaymentAuditLog, SanctionsAlert
 from app.models.transactions import (
+    SQLITE_TRIGGERS,
     AuditLog,
     CashPosition,
     Transaction,
     TransactionShadowArchive,
-    SQLITE_TRIGGERS,
 )
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DATABASE FIXTURES
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _make_engine():
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
+        poolclass=StaticPool,  # <--- FIXED: Added StaticPool for concurrency
     )
 
     @event.listens_for(engine, "connect")
@@ -105,11 +107,12 @@ def session_factory():
 # FASTAPI CLIENT FIXTURE
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(scope="function")
 def client(db_session: Session) -> Generator[TestClient, None, None]:
     """FastAPI TestClient with overridden DB dependency."""
-    from app.main import app
     from app.database import get_db
+    from app.main import app
 
     def override_get_db():
         try:
@@ -128,6 +131,7 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
 # ─────────────────────────────────────────────────────────────────────────────
 # ENTITY / ACCOUNT FIXTURES
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture(scope="function")
 def test_entity(db_session: Session) -> Entity:
@@ -178,9 +182,11 @@ def eur_account(db_session: Session, test_entity: Entity) -> BankAccount:
 # RSA KEY FIXTURES (per user role)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(scope="session")
 def analyst_keypair():
     from cryptography.hazmat.primitives.asymmetric import rsa
+
     priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     return priv, priv.public_key()
 
@@ -188,6 +194,7 @@ def analyst_keypair():
 @pytest.fixture(scope="session")
 def manager_keypair():
     from cryptography.hazmat.primitives.asymmetric import rsa
+
     priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     return priv, priv.public_key()
 
@@ -195,6 +202,7 @@ def manager_keypair():
 @pytest.fixture(scope="session")
 def auditor_keypair():
     from cryptography.hazmat.primitives.asymmetric import rsa
+
     priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     return priv, priv.public_key()
 
@@ -202,6 +210,7 @@ def auditor_keypair():
 @pytest.fixture(scope="session")
 def admin_keypair():
     from cryptography.hazmat.primitives.asymmetric import rsa
+
     priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     return priv, priv.public_key()
 
@@ -210,27 +219,32 @@ def admin_keypair():
 # JWT TOKEN FIXTURES
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(scope="session")
 def analyst_token() -> str:
     from app.core.security import create_access_token
+
     return create_access_token("analyst_001", "treasury_analyst")
 
 
 @pytest.fixture(scope="session")
 def manager_token() -> str:
     from app.core.security import create_access_token
+
     return create_access_token("manager_001", "treasury_manager")
 
 
 @pytest.fixture(scope="session")
 def auditor_token() -> str:
     from app.core.security import create_access_token
+
     return create_access_token("auditor_001", "auditor")
 
 
 @pytest.fixture(scope="session")
 def admin_token() -> str:
     from app.core.security import create_access_token
+
     return create_access_token("admin_001", "system_admin")
 
 
@@ -238,10 +252,12 @@ def admin_token() -> str:
 # FX CACHE FIXTURE
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(scope="function")
 def mock_fx_cache():
     """Pre-loaded FX rate cache with major currency pairs."""
     from app.services.cash_positioning import FXRateCache
+
     cache = FXRateCache()
     rates = {
         ("EUR", "USD"): Decimal("1.0870"),
@@ -262,6 +278,7 @@ def mock_fx_cache():
 # ─────────────────────────────────────────────────────────────────────────────
 # CAMT.053 / MT940 SAMPLE DATA HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def build_sample_camt053(
     message_id: str,

@@ -12,7 +12,10 @@ from decimal import Decimal, getcontext
 from typing import Dict, Optional
 
 from app.core.day_count import calculate_interest, resolve_convention
-from app.core.exceptions import TransferPricingViolationError, UnsupportedConventionError
+from app.core.exceptions import (
+    TransferPricingViolationError,
+    UnsupportedConventionError,
+)
 
 getcontext().prec = 28
 
@@ -20,14 +23,14 @@ getcontext().prec = 28
 @dataclass
 class DebtInstrument:
     instrument_id: str
-    instrument_type: str    # LOAN | DEPOSIT | BOND | INTERCOMPANY
+    instrument_type: str  # LOAN | DEPOSIT | BOND | INTERCOMPANY
     currency: str
     principal: Decimal
-    rate: Decimal           # annual rate (can be negative)
+    rate: Decimal  # annual rate (can be negative)
     start_date: date
     maturity_date: date
     convention_override: Optional[str] = None
-    instrument_subtype: Optional[str] = None   # MM | BOND for USD disambiguation
+    instrument_subtype: Optional[str] = None  # MM | BOND for USD disambiguation
 
 
 @dataclass
@@ -46,7 +49,7 @@ class DebtInvestmentLedger:
     Enforces day-count conventions, negative rate GL reversals, transfer pricing.
     """
 
-    ARM_LENGTH_BPS = Decimal("150")   # ±150 bps from base_rate
+    ARM_LENGTH_BPS = Decimal("150")  # ±150 bps from base_rate
 
     def __init__(self) -> None:
         self._instruments: Dict[str, DebtInstrument] = {}
@@ -57,7 +60,10 @@ class DebtInvestmentLedger:
     def _resolve_convention(self, instrument: DebtInstrument) -> str:
         if instrument.convention_override:
             if instrument.convention_override not in (
-                "ACT/360", "ACT/365", "30/360", "ACT/ACT"
+                "ACT/360",
+                "ACT/365",
+                "30/360",
+                "ACT/ACT",
             ):
                 raise UnsupportedConventionError(instrument.convention_override)
             return instrument.convention_override
@@ -78,8 +84,9 @@ class DebtInvestmentLedger:
         convention = self._resolve_convention(instrument)
 
         interest = calculate_interest(
-            principal=instrument.principal,
-            annual_rate=instrument.rate,
+            # FIX: Changed 'principal' to 'notional' to match core function signature
+            notional=instrument.principal,
+            rate=instrument.rate,
             start=start,
             end=end,
             convention=convention,
@@ -104,9 +111,7 @@ class DebtInvestmentLedger:
 
     # ── Intercompany netting ───────────────────────────────────────────────────
 
-    def record_intercompany_position(
-        self, entity_pair: str, amount: Decimal
-    ) -> None:
+    def record_intercompany_position(self, entity_pair: str, amount: Decimal) -> None:
         current = self._intercompany_positions.get(entity_pair, Decimal("0"))
         self._intercompany_positions[entity_pair] = current + amount
 

@@ -475,3 +475,16 @@ class AuthenticationError(NexusTreasuryError):
 
     def __init__(self, reason: str = "Invalid or expired token") -> None:
         super().__init__(message=reason, detail={"reason": reason})
+
+
+class DoubleApprovalError(NexusTreasuryError):
+    http_status_code = 409
+    error_code = "DOUBLE_APPROVAL"
+
+    def __init__(self, payment_id: str, user_id: str) -> None:
+        self.payment_id = payment_id
+        self.user_id = user_id
+        super().__init__(
+            message=f"Payment {payment_id} has already been approved or processed.",
+            detail={"payment_id": payment_id, "attempted_by": user_id},
+        )
