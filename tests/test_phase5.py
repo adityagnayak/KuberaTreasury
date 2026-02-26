@@ -23,7 +23,7 @@ from app.core.exceptions import (
     PermissionDeniedError,
 )
 from app.models.entities import BankAccount, Entity
-from app.models.mandates import KYCDocument, Mandate
+from app.models.mandates import KYCDocument
 from app.services.ebam import EBAMService
 from app.services.rbac import RBACService
 
@@ -356,9 +356,18 @@ class TestConcurrency:
             errors.append(f"Max retries exceeded for delta {delta}")
 
         threads = [
-            threading.Thread(target=update_balance, args=(Decimal("500.00"),)),
-            threading.Thread(target=update_balance, args=(Decimal("-200.00"),)),
-            threading.Thread(target=update_balance, args=(Decimal("100.00"),)),
+            threading.Thread(
+                target=update_balance,
+                args=(Decimal("500.00"),),
+            ),
+            threading.Thread(
+                target=update_balance,
+                args=(Decimal("-200.00"),),
+            ),
+            threading.Thread(
+                target=update_balance,
+                args=(Decimal("100.00"),),
+            ),
         ]
 
         # Small stagger to reduce initial collision

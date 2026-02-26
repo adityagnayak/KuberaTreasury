@@ -10,7 +10,7 @@ import difflib
 import hashlib
 import re
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, getcontext
 from typing import List, Optional
@@ -494,8 +494,6 @@ class PaymentService:
                 )
 
         # 2. Generate ID and Create Payment (DRAFT)
-        # We generate ID manually to ensure it exists for the foreign key in SanctionsAlert
-        # before the payment is committed/flushed.
         new_payment_id = str(uuid.uuid4())
         e2e_id = payment_req.end_to_end_id or f"E2E-{uuid.uuid4().hex[:16].upper()}"
 
