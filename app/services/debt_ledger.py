@@ -84,11 +84,10 @@ class DebtInvestmentLedger:
         convention = self._resolve_convention(instrument)
 
         interest = calculate_interest(
-            # FIX: Changed 'principal' to 'notional' to match core function signature
             notional=instrument.principal,
             rate=instrument.rate,
-            start=start,
-            end=end,
+            start_date=start,
+            end_date=end,
             convention=convention,
         )
 

@@ -15,7 +15,7 @@ from typing import Dict, List, Optional, Tuple
 
 import holidays as holidays_lib
 
-from app.core.exceptions import MarketVolatilityAlert
+from app.core.exceptions import FlashCrashAlert, MarketVolatilityAlert
 
 getcontext().prec = 28
 
@@ -38,6 +38,7 @@ _BASE_RATES: Dict[str, Decimal] = {
 
 
 # ─── Thread-safe rate store ───────────────────────────────────────────────────
+
 
 class ThreadSafeRateStore:
     def __init__(self) -> None:
@@ -101,6 +102,7 @@ class MockFXRateService:
 
 # ─── VaR Calculation ─────────────────────────────────────────────────────────
 
+
 def generate_historical_returns(
     pair: str, n: int = 250, seed: int = 42
 ) -> List[Decimal]:
@@ -155,6 +157,7 @@ def calculate_var(
 
 
 # ─── Flash Crash Detector ─────────────────────────────────────────────────────
+
 
 @dataclass
 class FlashCrashEvent:
@@ -232,11 +235,24 @@ class FlashCrashDetector:
             frozen = []
             for pid, pdata in self._payment_registry.items():
                 if pdata.get("pair") == pair and pdata.get("status") not in (
-                    "FROZEN", "FX_VOLATILITY_HOLD", "EXPORTED", "FAILED"
+                    "FROZEN",
+                    "FX_VOLATILITY_HOLD",
+                    "EXPORTED",
+                    "FAILED",
                 ):
                     pdata["status"] = "FX_VOLATILITY_HOLD"
                     frozen.append(pid)
             event.frozen_payment_ids = frozen
+
+            self._alerts.append(event)
+            self._fx.update_rate(pair, new_rate, now)
+            # FIX: Raise specific alert for hard crash
+            raise FlashCrashAlert(
+                pair=pair,
+                old_rate=old_rate,
+                new_rate=new_rate,
+                swing_pct=swing,
+            )
 
         self._alerts.append(event)
         self._fx.update_rate(pair, new_rate, now)
@@ -251,8 +267,13 @@ class FlashCrashDetector:
 # ─── Forward Settlement Adjuster ──────────────────────────────────────────────
 
 _CURRENCY_COUNTRY_MAP = {
-    "USD": "US", "EUR": "DE", "GBP": "GB",
-    "JPY": "JP", "CHF": "CH", "AUD": "AU", "CAD": "CA",
+    "USD": "US",
+    "EUR": "DE",
+    "GBP": "GB",
+    "JPY": "JP",
+    "CHF": "CH",
+    "AUD": "AU",
+    "CAD": "CA",
 }
 
 

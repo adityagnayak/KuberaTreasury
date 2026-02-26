@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import threading
 import unicodedata
 import uuid
 from dataclasses import dataclass, field
@@ -98,6 +99,9 @@ class StatementIngestionService:
     backdated transaction handling, and full audit logging.
     """
 
+    # Fix: Class-level lock to prevent race conditions during duplicate checks in tests
+    _ingest_lock = threading.Lock()
+
     CAMT053_NAMESPACES = [
         "urn:iso:std:iso:20022:tech:xsd:camt.053.001.02",
         "urn:iso:std:iso:20022:tech:xsd:camt.053.001.03",
@@ -124,7 +128,16 @@ class StatementIngestionService:
         ns_uri = self._detect_camt_namespace(root)
         ns = {"camt": ns_uri}
 
-        msg_id_el = self._get_child_text(root, ["MsgId", "camt:MsgId"], ns)
+        msg_id_el = self._get_child_text(
+            root,
+            [
+                "BkToCstmrStmt/GrpHdr/MsgId",
+                "camt:BkToCstmrStmt/camt:GrpHdr/camt:MsgId",
+                "MsgId",
+                "camt:MsgId",
+            ],
+            ns,
+        )
         msg_id = safe_decode_remittance(msg_id_el or f"UNKNOWN-{file_hash[:8]}")
 
         stmt = self._find_element(root, ["Stmt"], ns)
@@ -145,21 +158,25 @@ class StatementIngestionService:
             self._parse_date_flexible(stmt_date_str) if stmt_date_str else date.today()
         )
 
-        self._check_duplicate(file_hash, msg_id, legal_seq, user_id)
-        account = self._resolve_account_by_iban(iban)
+        # Fix: Lock specifically around the check-and-insert block for duplicates
+        with self._ingest_lock:
+            self._check_duplicate(file_hash, msg_id, legal_seq, user_id)
+            account = self._resolve_account_by_iban(iban)
 
-        stmt_record = StatementRegistry(
-            account_id=account.id,
-            file_hash=file_hash,
-            message_id=msg_id,
-            legal_sequence_number=legal_seq,
-            statement_date=stmt_date,
-            status="pending",
-            imported_by=user_id,
-            format="camt053",
-        )
-        self._session.add(stmt_record)
-        self._session.flush()
+            stmt_record = StatementRegistry(
+                account_id=account.id,
+                file_hash=file_hash,
+                message_id=msg_id,
+                legal_sequence_number=legal_seq,
+                statement_date=stmt_date,
+                status="pending",
+                imported_by=user_id,
+                format="camt053",
+            )
+            self._session.add(stmt_record)
+            self._session.flush()
+            # Commit to ensure other threads see this record immediately
+            self._session.commit()
 
         entries = self._find_all_elements(root, "Ntry", ns)
         txns_imported = 0
@@ -208,21 +225,23 @@ class StatementIngestionService:
         iban = parsed.get("field_25_iban")
         stmt_date: date = parsed.get("stmt_date", date.today())
 
-        self._check_duplicate(file_hash, msg_id, None, user_id)
-        account = self._resolve_account_by_iban(iban)
+        with self._ingest_lock:
+            self._check_duplicate(file_hash, msg_id, None, user_id)
+            account = self._resolve_account_by_iban(iban)
 
-        stmt_record = StatementRegistry(
-            account_id=account.id,
-            file_hash=file_hash,
-            message_id=msg_id,
-            legal_sequence_number=parsed.get("field_28c"),
-            statement_date=stmt_date,
-            status="pending",
-            imported_by=user_id,
-            format="mt940",
-        )
-        self._session.add(stmt_record)
-        self._session.flush()
+            stmt_record = StatementRegistry(
+                account_id=account.id,
+                file_hash=file_hash,
+                message_id=msg_id,
+                legal_sequence_number=parsed.get("field_28c"),
+                statement_date=stmt_date,
+                status="pending",
+                imported_by=user_id,
+                format="mt940",
+            )
+            self._session.add(stmt_record)
+            self._session.flush()
+            self._session.commit()
 
         txns_imported = 0
         txns_skipped = 0
@@ -436,7 +455,7 @@ class StatementIngestionService:
         entry_delta: Decimal,
         value_delta: Decimal,
     ) -> None:
-        self._session.flush()  # <--- FIXED: Added flush to see newly created records in same loop
+        self._session.flush()
         existing = (
             self._session.query(CashPosition)
             .filter_by(account_id=account_id, position_date=pos_date, currency=currency)

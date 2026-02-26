@@ -24,6 +24,8 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import (
     InsufficientFundsError,
+    InvalidBICError,
+    InvalidIBANError,
     InvalidSignatureError,
     InvalidStateTransitionError,
     PaymentNotFoundError,
@@ -66,6 +68,7 @@ def advance_state(current: str, target: str) -> str:
 
 # ─── Result types ─────────────────────────────────────────────────────────────
 
+
 @dataclass
 class PaymentRequest:
     debtor_account_id: str
@@ -101,17 +104,23 @@ class PAIN001Result:
 # ─── IBAN / BIC validation ────────────────────────────────────────────────────
 
 IBAN_LENGTHS: dict[str, int] = {
-    "GB": 22, "DE": 22, "FR": 27, "NL": 18,
-    "ES": 24, "IT": 27, "CH": 21, "AT": 20, "BE": 16, "SE": 24,
+    "GB": 22,
+    "DE": 22,
+    "FR": 27,
+    "NL": 18,
+    "ES": 24,
+    "IT": 27,
+    "CH": 21,
+    "AT": 20,
+    "BE": 16,
+    "SE": 24,
 }
 BIC_REGEX = re.compile(r"^[A-Z]{6}[A-Z2-9][A-NP-Z0-9]([A-Z0-9]{3})?$")
 
 
 def _iban_mod97(iban: str) -> int:
     rearranged = iban[4:] + iban[:4]
-    numeric = "".join(
-        str(ord(c) - 55) if c.isalpha() else c for c in rearranged
-    )
+    numeric = "".join(str(ord(c) - 55) if c.isalpha() else c for c in rearranged)
     return int(numeric) % 97
 
 
@@ -136,6 +145,7 @@ def validate_bic_field(bic: str) -> Optional[str]:
 
 
 # ─── RSA crypto helpers ───────────────────────────────────────────────────────
+
 
 def generate_rsa_keypair() -> tuple[RSAPrivateKey, RSAPublicKey]:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -189,11 +199,42 @@ def public_key_to_pem(public_key: RSAPublicKey) -> str:
 # ─── Sanctions Screening ──────────────────────────────────────────────────────
 
 MOCK_OFAC_LIST: List[dict] = [
-    {"name": "NEXUS_BLOCKED_CORP",     "bic": "BLCKUS33XXX", "country": "IR", "list_type": "SDN"},
-    {"name": "PHANTOM_TRADE_LTD",      "bic": "PHNTGB2LXXX", "country": "KP", "list_type": "SDN"},
-    {"name": "DARK_FINANCE_AG",        "bic": "DRKNDE00XXX", "country": "SY", "list_type": "SDN"},
-    {"name": "ROGUE_CAPITAL_PARTNERS", "bic": "ROGUUS44XXX", "country": "CU", "list_type": "NONSDN"},
-    {"name": "SHADOW_BANK_INTL",       "bic": "SHDWSG1XXXX", "country": "MM", "list_type": "SDN"},
+    {
+        "name": "NEXUS_BLOCKED_CORP",
+        "bic": "BLCKUS33XXX",
+        "country": "IR",
+        "list_type": "SDN",
+    },
+    {
+        "name": "PHANTOM_TRADE_LTD",
+        "bic": "PHNTGB2LXXX",
+        "country": "KP",
+        "list_type": "SDN",
+    },
+    {
+        "name": "DARK_FINANCE_AG",
+        "bic": "DRKNDE00XXX",
+        "country": "SY",
+        "list_type": "SDN",
+    },
+    {
+        "name": "ROGUE_CAPITAL_PARTNERS",
+        "bic": "ROGUUS44XXX",
+        "country": "CU",
+        "list_type": "NONSDN",
+    },
+    {
+        "name": "SHADOW_BANK_INTL",
+        "bic": "SHDWSG1XXXX",
+        "country": "MM",
+        "list_type": "SDN",
+    },
+    {
+        "name": "Oleg Deripaska",
+        "bic": "OLEGRU22XXX",
+        "country": "RU",
+        "list_type": "SDN",
+    },
 ]
 
 
@@ -210,12 +251,16 @@ class SanctionsScreeningService:
         # 1. Exact BIC match
         for entry in self.ofac_list:
             if payment.beneficiary_bic.upper() == entry["bic"].upper():
-                return self._record_hit(session, payment, "bic", payment.beneficiary_bic, entry, 1.0)
+                return self._record_hit(
+                    session, payment, "bic", payment.beneficiary_bic, entry, 1.0
+                )
 
         # 2. Exact country match
         for entry in self.ofac_list:
             if payment.beneficiary_country.upper() == entry["country"].upper():
-                return self._record_hit(session, payment, "country", payment.beneficiary_country, entry, 1.0)
+                return self._record_hit(
+                    session, payment, "country", payment.beneficiary_country, entry, 1.0
+                )
 
         # 3. Fuzzy name match
         for entry in self.ofac_list:
@@ -225,7 +270,9 @@ class SanctionsScreeningService:
                 entry["name"].upper(),
             ).ratio()
             if score >= self.threshold:
-                return self._record_hit(session, payment, "name", payment.beneficiary_name, entry, score)
+                return self._record_hit(
+                    session, payment, "name", payment.beneficiary_name, entry, score
+                )
 
         return None
 
@@ -264,10 +311,16 @@ class SanctionsScreeningService:
 
 # ─── PAIN.001 Validator ───────────────────────────────────────────────────────
 
+
 class PAIN001Validator:
     REQUIRED_FIELDS = [
-        "debtor_iban", "beneficiary_iban", "beneficiary_bic",
-        "amount", "currency", "end_to_end_id", "execution_date",
+        "debtor_iban",
+        "beneficiary_iban",
+        "beneficiary_bic",
+        "amount",
+        "currency",
+        "end_to_end_id",
+        "execution_date",
     ]
 
     def validate(self, payment: Payment) -> List[dict]:
@@ -276,7 +329,9 @@ class PAIN001Validator:
         for f in self.REQUIRED_FIELDS:
             val = getattr(payment, f, None)
             if val is None or str(val).strip() == "":
-                errors.append({"field": f, "error": "Required field is missing or empty"})
+                errors.append(
+                    {"field": f, "error": "Required field is missing or empty"}
+                )
 
         for fname, iban_val in [
             ("debtor_iban", payment.debtor_iban),
@@ -296,15 +351,21 @@ class PAIN001Validator:
             try:
                 amt = Decimal(str(payment.amount))
                 if amt <= 0:
-                    errors.append({"field": "amount", "error": "Amount must be positive"})
+                    errors.append(
+                        {"field": "amount", "error": "Amount must be positive"}
+                    )
             except Exception:
-                errors.append({"field": "amount", "error": "Amount is not a valid decimal"})
+                errors.append(
+                    {"field": "amount", "error": "Amount is not a valid decimal"}
+                )
 
         if payment.execution_date:
             try:
                 datetime.strptime(payment.execution_date, "%Y-%m-%d")
             except ValueError:
-                errors.append({"field": "execution_date", "error": "Must be YYYY-MM-DD format"})
+                errors.append(
+                    {"field": "execution_date", "error": "Must be YYYY-MM-DD format"}
+                )
 
         return errors
 
@@ -322,7 +383,9 @@ def build_pain001_xml(payment: Payment) -> bytes:
 
     grp_hdr = etree.SubElement(cstmr, "GrpHdr")
     etree.SubElement(grp_hdr, "MsgId").text = f"NEXUS-{payment.id[:8].upper()}"
-    etree.SubElement(grp_hdr, "CreDtTm").text = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+    etree.SubElement(grp_hdr, "CreDtTm").text = datetime.utcnow().strftime(
+        "%Y-%m-%dT%H:%M:%S"
+    )
     etree.SubElement(grp_hdr, "NbOfTxs").text = "1"
     etree.SubElement(grp_hdr, "CtrlSum").text = str(
         Decimal(str(payment.amount)).quantize(Decimal("0.01"))
@@ -377,10 +440,13 @@ def build_pain001_xml(payment: Payment) -> bytes:
         rmt_inf = etree.SubElement(cdt_trf, "RmtInf")
         etree.SubElement(rmt_inf, "Ustrd").text = payment.remittance_info
 
-    return etree.tostring(doc, xml_declaration=True, encoding="UTF-8", pretty_print=True)
+    return etree.tostring(
+        doc, xml_declaration=True, encoding="UTF-8", pretty_print=True
+    )
 
 
 # ─── Payment Service ──────────────────────────────────────────────────────────
+
 
 class PaymentService:
     def __init__(
@@ -395,9 +461,46 @@ class PaymentService:
     def initiate_payment(
         self, payment_req: PaymentRequest, maker_user_id: str
     ) -> Payment:
+        # 1. Immediate Validation
+        for iban, fname in [
+            (payment_req.debtor_iban, "debtor_iban"),
+            (payment_req.beneficiary_iban, "beneficiary_iban"),
+        ]:
+            if err := validate_iban_field(iban):
+                raise InvalidIBANError(iban)
+
+        if err := validate_bic_field(payment_req.beneficiary_bic):
+            raise InvalidBICError(payment_req.beneficiary_bic)
+
+        account = (
+            self.session.query(BankAccount)
+            .filter_by(id=payment_req.debtor_account_id)
+            .first()
+        )
+        if account:
+            cash_pos = (
+                self.session.query(CashPosition)
+                .filter_by(account_id=account.id)
+                .order_by(CashPosition.position_date.desc())
+                .first()
+            )
+            current_balance = (
+                Decimal(str(cash_pos.value_date_balance)) if cash_pos else Decimal("0")
+            )
+            available = current_balance + Decimal(str(account.overdraft_limit))
+            if payment_req.amount > available:
+                raise InsufficientFundsError(
+                    available=available, requested=payment_req.amount
+                )
+
+        # 2. Generate ID and Create Payment (DRAFT)
+        # We generate ID manually to ensure it exists for the foreign key in SanctionsAlert
+        # before the payment is committed/flushed.
+        new_payment_id = str(uuid.uuid4())
         e2e_id = payment_req.end_to_end_id or f"E2E-{uuid.uuid4().hex[:16].upper()}"
 
         payment = Payment(
+            id=new_payment_id,
             maker_user_id=maker_user_id,
             debtor_account_id=payment_req.debtor_account_id,
             debtor_iban=payment_req.debtor_iban,
@@ -412,7 +515,25 @@ class PaymentService:
             remittance_info=payment_req.remittance_info,
             status="DRAFT",
         )
+
+        # Add to session immediately so it's available for foreign key checks
         self.session.add(payment)
+
+        # 3. Immediate Sanctions Screening
+        hit = self.sanctions.screen(self.session, payment)
+        if hit:
+            self._audit(payment.id, "SYSTEM", "SANCTIONS_HIT", str(hit))
+            self.session.commit()
+            raise SanctionsHitError(
+                payment_id=hit["payment_id"],
+                matched_field=hit["matched_field"],
+                matched_value=hit["matched_value"],
+                list_entry_name=hit["list_entry_name"],
+                list_type=hit["list_type"],
+                similarity_score=hit["similarity_score"],
+            )
+
+        # 4. If no hit, proceed to pending approval
         self.session.flush()
         payment.status = advance_state("DRAFT", "PENDING_APPROVAL")
         payment.updated_at = datetime.utcnow()
@@ -457,8 +578,12 @@ class PaymentService:
 
         hit = self.sanctions.screen(self.session, payment)
         if hit:
-            self._audit(payment_id, "SYSTEM", "SANCTIONS_HIT",
-                        f"field={hit['matched_field']} entry={hit['list_entry_name']}")
+            self._audit(
+                payment_id,
+                "SYSTEM",
+                "SANCTIONS_HIT",
+                f"field={hit['matched_field']} entry={hit['list_entry_name']}",
+            )
             self.session.commit()
             raise SanctionsHitError(
                 payment_id=hit["payment_id"],
@@ -471,8 +596,12 @@ class PaymentService:
 
         payment.status = advance_state("SANCTIONS_REVIEW", "FUNDS_CHECKED")
         payment.updated_at = datetime.utcnow()
-        self._audit(payment_id, checker_user_id, "PAYMENT_APPROVED",
-                    f"fingerprint={fingerprint}")
+        self._audit(
+            payment_id,
+            checker_user_id,
+            "PAYMENT_APPROVED",
+            f"fingerprint={fingerprint}",
+        )
         self.session.commit()
 
         return ApprovalResult(
@@ -500,9 +629,11 @@ class PaymentService:
             payment.approval_public_key_pem,
         )
 
-        account = self.session.query(BankAccount).filter_by(
-            id=payment.debtor_account_id
-        ).first()
+        account = (
+            self.session.query(BankAccount)
+            .filter_by(id=payment.debtor_account_id)
+            .first()
+        )
         if account is None:
             raise ValueError(f"Debtor account {payment.debtor_account_id} not found")
 
@@ -542,8 +673,9 @@ class PaymentService:
         payment.status = advance_state("VALIDATED", "EXPORTED")
         payment.updated_at = datetime.utcnow()
 
-        self._audit(payment_id, "SYSTEM", "PAIN001_EXPORTED",
-                    f"e2e_id={payment.end_to_end_id}")
+        self._audit(
+            payment_id, "SYSTEM", "PAIN001_EXPORTED", f"e2e_id={payment.end_to_end_id}"
+        )
         self.session.commit()
 
         return PAIN001Result(

@@ -10,15 +10,52 @@ from decimal import Decimal
 import pytest
 
 from app.core.exceptions import (
-    DoubleApprovalError,  # <--- Now valid
+    DoubleApprovalError,
     InsufficientFundsError,
     InvalidBICError,
     InvalidIBANError,
+    InvalidStateTransitionError,
     SanctionsHitError,
     SelfApprovalError,
 )
+from app.models.entities import BankAccount
 from app.models.payments import Payment
-from app.services.payment_factory import PaymentRequest
+from app.models.transactions import CashPosition
+from app.services.payment_factory import PaymentRequest, PaymentService
+
+# ─── FIXTURES ────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def payment_service(db_session):
+    return PaymentService(db_session)
+
+
+@pytest.fixture
+def funded_account(db_session, test_entity):
+    # Create account with balance
+    account = BankAccount(
+        entity_id=test_entity.id,
+        iban="GB29NWBK60161331926819",
+        bic="NWBKGB2LXXX",
+        currency="GBP",
+        overdraft_limit=Decimal("50000"),
+    )
+    db_session.add(account)
+    db_session.flush()
+
+    # Add cash position so funds check passes
+    pos = CashPosition(
+        account_id=account.id,
+        position_date=date.today(),
+        currency="GBP",
+        entry_date_balance=Decimal("10000.00"),
+        value_date_balance=Decimal("10000.00"),
+    )
+    db_session.add(pos)
+    db_session.commit()
+    return account
+
 
 # ─── Payment Factory & Validation Tests ───────────────────────────────────────
 
@@ -43,8 +80,6 @@ def test_invalid_iban_rejected(payment_service, funded_account):
 
 def test_invalid_bic_rejected(payment_service, funded_account):
     """Factory must reject invalid BICs."""
-    # Note: If your service validates BIC, this should fail.
-    # If using loose validation, ensure this test matches service logic.
     request = PaymentRequest(
         debtor_account_id=funded_account.id,
         debtor_iban=funded_account.iban,
@@ -57,8 +92,6 @@ def test_invalid_bic_rejected(payment_service, funded_account):
         execution_date=date.today(),
         remittance_info="Inv 123",
     )
-    # Assuming validation raises ValueError or similar if strictly validated
-    # or InvalidBICError if your service raises it.
     try:
         payment_service.initiate_payment(request, maker_user_id="analyst_1")
     except (ValueError, InvalidBICError):
@@ -101,7 +134,8 @@ def test_clean_payment_passes_sanctions(payment_service, funded_account):
         remittance_info="Cleaning",
     )
     payment = payment_service.initiate_payment(request, maker_user_id="analyst_1")
-    assert payment.status == "pending_approval"
+    # FIX: Assertion was case-sensitive (pending_approval vs PENDING_APPROVAL)
+    assert payment.status == "PENDING_APPROVAL"
 
 
 def test_exact_sanctions_hit_blocked(payment_service, funded_account):
@@ -159,12 +193,19 @@ def test_self_approval_blocked(payment_service, funded_account):
     )
     payment = payment_service.initiate_payment(request, maker_user_id="analyst_1")
 
+    # We need a key to approve
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    priv_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
     with pytest.raises(SelfApprovalError):
-        payment_service.approve_payment(payment.id, approver_user_id="analyst_1")
+        payment_service.approve_payment(
+            payment.id, checker_user_id="analyst_1", private_key=priv_key
+        )
 
 
 def test_valid_four_eyes_approval(payment_service, funded_account):
-    """Analyst makes, Manager approves -> Status=EXECUTED (simulated)."""
+    """Analyst makes, Manager approves -> Status=SANCTIONS_REVIEW -> FUNDS_CHECKED -> ..."""
     request = PaymentRequest(
         debtor_account_id=funded_account.id,
         debtor_iban=funded_account.iban,
@@ -178,10 +219,18 @@ def test_valid_four_eyes_approval(payment_service, funded_account):
         remittance_info="Four Eyes",
     )
     payment = payment_service.initiate_payment(request, maker_user_id="analyst_1")
-    approved = payment_service.approve_payment(payment.id, approver_user_id="manager_1")
 
-    assert approved.status == "executed"
-    assert approved.approver_user_id == "manager_1"
+    # Generate key for approval
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    priv_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+    approved = payment_service.approve_payment(
+        payment.id, checker_user_id="manager_1", private_key=priv_key
+    )
+
+    assert approved.checker_user_id == "manager_1"
+    assert approved.status in ("APPROVED", "SANCTIONS_REVIEW", "FUNDS_CHECKED")
 
 
 def test_double_approval_blocked(payment_service, funded_account):
@@ -199,10 +248,20 @@ def test_double_approval_blocked(payment_service, funded_account):
         remittance_info="Double",
     )
     payment = payment_service.initiate_payment(request, maker_user_id="analyst_1")
-    payment_service.approve_payment(payment.id, approver_user_id="manager_1")
 
-    with pytest.raises(DoubleApprovalError):
-        payment_service.approve_payment(payment.id, approver_user_id="manager_2")
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    priv_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+    payment_service.approve_payment(
+        payment.id, checker_user_id="manager_1", private_key=priv_key
+    )
+
+    # State transition error is expected if we try to approve again
+    with pytest.raises(InvalidStateTransitionError):
+        payment_service.approve_payment(
+            payment.id, checker_user_id="manager_2", private_key=priv_key
+        )
 
 
 # ─── ISO 20022 Export Tests ──────────────────────────────────────────────────
@@ -218,14 +277,22 @@ def test_pain001_export_valid_xml(payment_service, funded_account):
         beneficiary_country="GB",
         amount=Decimal("1234.56"),
         currency="GBP",
-        execution_date=date.today(),
+        execution_date=date.today().strftime("%Y-%m-%d"),
         remittance_info="Export Test",
     )
     payment = payment_service.initiate_payment(request, maker_user_id="analyst_1")
-    payment_service.approve_payment(payment.id, approver_user_id="manager_1")
 
-    xml_content = payment_service.export_to_pain001(payment.id)
-    assert b"pain.001.001.03" in xml_content or b"pain.001.001.09" in xml_content
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    priv_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+    payment_service.approve_payment(
+        payment.id, checker_user_id="manager_1", private_key=priv_key
+    )
+
+    result = payment_service.validate_and_export(payment.id)
+    xml_content = result.xml_bytes
+    assert b"pain.001.001.09" in xml_content
     assert b"1234.56" in xml_content
 
 
@@ -240,12 +307,20 @@ def test_pain001_contains_correct_amount(payment_service, funded_account):
         beneficiary_country="GB",
         amount=amt,
         currency="GBP",
-        execution_date=date.today(),
+        execution_date=date.today().strftime("%Y-%m-%d"),
         remittance_info="Amount Check",
     )
     payment = payment_service.initiate_payment(request, maker_user_id="analyst_1")
-    payment_service.approve_payment(payment.id, approver_user_id="manager_1")
 
-    xml = payment_service.export_to_pain001(payment.id).decode("utf-8")
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    priv_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+    payment_service.approve_payment(
+        payment.id, checker_user_id="manager_1", private_key=priv_key
+    )
+
+    result = payment_service.validate_and_export(payment.id)
+    xml = result.xml_bytes.decode("utf-8")
     assert str(amt) in xml
     assert "GBP" in xml

@@ -1,34 +1,20 @@
 """
 NexusTreasury — Phase 5 Test Suite: Concurrency, E-BAM, RBAC
 FIX:
-  RBAC: check(role, action, resource) — not check(role, permission=...).
-        Role names: "treasury_analyst", "treasury_manager", "auditor", "system_admin".
-        Permissions use VERB:resource format e.g. "WRITE:approve_payment".
-        has_permission() is the non-raising version; check() raises on deny.
-        No require() method — use check() directly (it raises on deny).
-
-  EBAM: create_mandate(account_id, signatory_name, signatory_user_id, public_key,
-                        valid_from, valid_until)
-        public_key is RSAPublicKey object (not PEM string).
-        No verify_mandate() — use validate_payment_mandate(account_id).
-        No get_expiry_alerts() — use check_upcoming_expirations(days_ahead).
-        revoke_mandate(mandate_id, revoking_user_id) — no reason param.
-        No attach_kyc_document() — use register_kyc_document(entity_id, doc_type, doc_bytes).
-        KYCDocument has entity_id, not mandate_id.
-        mandate.status is lowercase: "active", "revoked".
-
-  CashPosition: no available_balance column — use entry_date_balance.
-  entity.id: flush() before using in BankAccount.
+  Concurrency: Added robust retries for SQLite 'database is locked' errors,
+               checking rowcount to verify update success.
 """
 
 from __future__ import annotations
 
 import threading
+import time
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.core.exceptions import (
     ExpiredMandateError,
@@ -313,7 +299,7 @@ class TestConcurrency:
                 name="Concurrency Corp", entity_type="parent", base_currency="EUR"
             )
             session.add(entity)
-            session.flush()  # FIX: populate entity.id
+            session.flush()
             account = BankAccount(
                 entity_id=entity.id,
                 iban=f"DE89370400440532{str(uuid.uuid4().int)[:8]}",
@@ -322,12 +308,12 @@ class TestConcurrency:
                 overdraft_limit=Decimal("0"),
             )
             session.add(account)
-            session.flush()  # FIX: populate account.id
+            session.flush()
             pos = CashPosition(
                 account_id=account.id,
                 position_date=date.today(),
                 value_date_balance=Decimal("10000.00"),
-                entry_date_balance=Decimal("10000.00"),  # FIX: no available_balance
+                entry_date_balance=Decimal("10000.00"),
                 currency="EUR",
             )
             session.add(pos)
@@ -338,32 +324,57 @@ class TestConcurrency:
         results = []
 
         def update_balance(delta):
-            try:
-                with session_factory() as session:
-                    from sqlalchemy import text
+            # Attempt to update with retries for SQLite locking
+            # We verify rowcount to ensuring the update actually happened
+            for attempt in range(10):
+                try:
+                    with session_factory() as session:
+                        from sqlalchemy import text
 
-                    session.execute(
-                        text(
-                            "UPDATE cash_positions SET value_date_balance = value_date_balance + :delta WHERE id = :id"
-                        ),
-                        {"delta": str(delta), "id": pos_id},
-                    )
-                    session.commit()
-                    results.append(delta)
-            except Exception as e:
-                errors.append(str(e))
+                        # Explicit transaction needed for SQLite locking behavior check
+                        result = session.execute(
+                            text(
+                                "UPDATE cash_positions SET value_date_balance = value_date_balance + :delta WHERE id = :id"
+                            ),
+                            {"delta": str(delta), "id": pos_id},
+                        )
+                        session.commit()
+                        if result.rowcount > 0:
+                            results.append(delta)
+                            return
+                        else:
+                            # rowcount 0 means no row found, which shouldn't happen here unless deleted
+                            # or transaction visibility issue. We can treat as retryable or error.
+                            errors.append(f"Update rowcount=0 for delta {delta}")
+                            return
+                except OperationalError as e:
+                    if "locked" in str(e).lower():
+                        time.sleep(0.1 + (attempt * 0.05))  # Linear backoff
+                        continue
+                    errors.append(str(e))
+                    return
+                except Exception as e:
+                    errors.append(str(e))
+                    return
+            errors.append(f"Max retries exceeded for delta {delta}")
 
         threads = [
             threading.Thread(target=update_balance, args=(Decimal("500.00"),)),
             threading.Thread(target=update_balance, args=(Decimal("-200.00"),)),
             threading.Thread(target=update_balance, args=(Decimal("100.00"),)),
         ]
+
+        # Small stagger to reduce initial collision
         for t in threads:
             t.start()
+            time.sleep(0.01)
+
         for t in threads:
             t.join()
 
         assert len(errors) == 0, f"Concurrent update errors: {errors}"
+        # Extra check: Ensure all 3 updates were recorded
+        assert len(results) == 3, f"Expected 3 updates, got {len(results)}"
 
         with session_factory() as session:
             from app.models.transactions import CashPosition as CP
@@ -388,7 +399,7 @@ class TestConcurrency:
                 name="Concurrent Dup Corp", entity_type="parent", base_currency="EUR"
             )
             session.add(entity)
-            session.flush()  # FIX: populate entity.id
+            session.flush()
             account = BankAccount(
                 entity_id=entity.id,
                 iban=iban,
@@ -410,14 +421,24 @@ class TestConcurrency:
         errors = []
 
         def ingest():
-            try:
-                svc = StatementIngestionService(session_factory())
-                svc.ingest_camt053(xml_bytes, "concurrent_user")
-                successes.append(True)
-            except DuplicateStatementError:
-                errors.append("duplicate")
-            except Exception as e:
-                errors.append(str(e))
+            for attempt in range(5):
+                try:
+                    svc = StatementIngestionService(session_factory())
+                    svc.ingest_camt053(xml_bytes, "concurrent_user")
+                    successes.append(True)
+                    return
+                except DuplicateStatementError:
+                    errors.append("duplicate")
+                    return
+                except OperationalError as e:
+                    if "locked" in str(e).lower():
+                        time.sleep(0.05)
+                        continue
+                    errors.append(str(e))
+                    return
+                except Exception as e:
+                    errors.append(str(e))
+                    return
 
         threads = [threading.Thread(target=ingest) for _ in range(3)]
         for t in threads:
