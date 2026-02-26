@@ -1,0 +1,5 @@
+# Enforce LF line endings for python files to satisfy Black
+*.py text eol=lf
+
+# Auto-detect text files and normalize them
+* text=auto
