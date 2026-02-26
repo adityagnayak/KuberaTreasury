@@ -37,6 +37,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 # ─── JWT ──────────────────────────────────────────────────────────────────────
 
+
 def create_access_token(
     subject: str,
     role: str,
@@ -89,6 +90,7 @@ def decode_access_token(token: str) -> Dict[str, Any]:
 
 # ─── FastAPI dependency ───────────────────────────────────────────────────────
 
+
 class CurrentUser:
     """Represents the authenticated user extracted from JWT."""
 
@@ -123,6 +125,7 @@ def get_current_user(
 
 
 # ─── AES-256-GCM encryption for bank credentials at rest ─────────────────────
+
 
 def _get_aes_key() -> bytes:
     """Decode the 32-byte AES key from base64 config."""

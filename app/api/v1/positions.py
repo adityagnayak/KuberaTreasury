@@ -40,9 +40,7 @@ def get_position(
 ):
     rbac.check(current_user.role, "READ", "cash_positions")
     service = CashPositioningService(db, _fx_cache)
-    pos = service.get_position(
-        account_id, as_of_date or date.today(), use_value_date
-    )
+    pos = service.get_position(account_id, as_of_date or date.today(), use_value_date)
     return PositionResponse(
         account_id=pos.account_id,
         currency=pos.currency,

@@ -8,8 +8,17 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    Boolean, CheckConstraint, Column, Date, DateTime, Enum,
-    ForeignKey, Numeric, String, Text, UniqueConstraint,
+    Boolean,
+    CheckConstraint,
+    Column,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -35,7 +44,10 @@ class Transaction(Base):
     )
     status = Column(
         Enum(
-            "booked", "pending", "rejected", "pending_period_adj",
+            "booked",
+            "pending",
+            "rejected",
+            "pending_period_adj",
             name="txn_status_enum",
         ),
         nullable=False,
@@ -98,9 +110,7 @@ class CashPosition(Base):
         UniqueConstraint(
             "account_id", "position_date", "currency", name="uq_cash_position"
         ),
-        CheckConstraint(
-            "length(currency) = 3", name="ck_cash_positions_currency_len"
-        ),
+        CheckConstraint("length(currency) = 3", name="ck_cash_positions_currency_len"),
     )
 
     account = relationship("BankAccount", back_populates="cash_positions")
@@ -116,13 +126,17 @@ class AuditLog(Base):
     record_id = Column(String(36), nullable=True)
     action = Column(
         Enum(
-            "INSERT", "UPDATE", "DELETE", "DUPLICATE_ATTEMPT", "GAP_DETECTED",
+            "INSERT",
+            "UPDATE",
+            "DELETE",
+            "DUPLICATE_ATTEMPT",
+            "GAP_DETECTED",
             name="audit_action_enum",
         ),
         nullable=False,
     )
-    old_value = Column(Text, nullable=True)   # JSON
-    new_value = Column(Text, nullable=True)   # JSON
+    old_value = Column(Text, nullable=True)  # JSON
+    new_value = Column(Text, nullable=True)  # JSON
     user_id = Column(String(255), nullable=True)
     timestamp = Column(DateTime, nullable=False, default=datetime.utcnow)
 

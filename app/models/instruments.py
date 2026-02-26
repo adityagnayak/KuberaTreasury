@@ -8,7 +8,14 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    Column, Date, DateTime, ForeignKey, Numeric, String, Text, Boolean,
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Numeric,
+    String,
+    Text,
+    Boolean,
 )
 from sqlalchemy.orm import relationship
 
@@ -21,14 +28,18 @@ class Loan(Base):
     __tablename__ = "loans"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    instrument_type = Column(String(20), nullable=False)   # LOAN | DEPOSIT | INTERCOMPANY
+    instrument_type = Column(
+        String(20), nullable=False
+    )  # LOAN | DEPOSIT | INTERCOMPANY
     instrument_subtype = Column(String(20), nullable=True)  # MM | BOND (for USD)
     currency = Column(String(3), nullable=False)
     principal = Column(Numeric(precision=28, scale=8), nullable=False)
     annual_rate = Column(Numeric(precision=18, scale=8), nullable=False)
     start_date = Column(Date, nullable=False)
     maturity_date = Column(Date, nullable=False)
-    convention_override = Column(String(10), nullable=True)  # ACT/360 | ACT/365 | 30/360 | ACT/ACT
+    convention_override = Column(
+        String(10), nullable=True
+    )  # ACT/360 | ACT/365 | 30/360 | ACT/ACT
     counterparty_name = Column(String(255), nullable=True)
     entity_id = Column(String(36), ForeignKey("entities.id"), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
@@ -42,12 +53,14 @@ class FXForward(Base):
     __tablename__ = "fx_forwards"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    currency_pair = Column(String(7), nullable=False)    # e.g. EUR/USD
+    currency_pair = Column(String(7), nullable=False)  # e.g. EUR/USD
     notional = Column(Numeric(precision=28, scale=8), nullable=False)
     forward_rate = Column(Numeric(precision=18, scale=8), nullable=False)
     maturity_date = Column(Date, nullable=False)
     adjusted_maturity_date = Column(Date, nullable=True)
-    hedge_designation = Column(String(50), nullable=True)  # CASH_FLOW | FAIR_VALUE | NET_INVESTMENT
+    hedge_designation = Column(
+        String(50), nullable=True
+    )  # CASH_FLOW | FAIR_VALUE | NET_INVESTMENT
     fair_value = Column(Numeric(precision=28, scale=8), nullable=True)
     entity_id = Column(String(36), ForeignKey("entities.id"), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)

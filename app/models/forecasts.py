@@ -8,7 +8,14 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    Column, Date, DateTime, Enum, ForeignKey, Numeric, String, Text,
+    Column,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Numeric,
+    String,
+    Text,
 )
 from sqlalchemy.orm import relationship
 
@@ -24,7 +31,7 @@ class ForecastEntry(Base):
     account_id = Column(String(36), ForeignKey("bank_accounts.id"), nullable=False)
     currency = Column(String(3), nullable=False)
     expected_date = Column(Date, nullable=False)
-    original_expected_date = Column(Date, nullable=True)   # pre-roll date
+    original_expected_date = Column(Date, nullable=True)  # pre-roll date
     forecast_amount = Column(Numeric(precision=28, scale=8), nullable=False)
     description = Column(Text, nullable=True)
     reconciliation_status = Column(
@@ -56,17 +63,15 @@ class VarianceAlert(Base):
     __tablename__ = "alerts"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    alert_type = Column(String(50), nullable=False)   # HIGH_PRIORITY_INVESTIGATION
+    alert_type = Column(String(50), nullable=False)  # HIGH_PRIORITY_INVESTIGATION
     account_id = Column(String(36), nullable=False)
     forecast_id = Column(String(36), ForeignKey("forecasts.id"), nullable=True)
-    transaction_id = Column(
-        String(36), ForeignKey("transactions.id"), nullable=True
-    )
+    transaction_id = Column(String(36), ForeignKey("transactions.id"), nullable=True)
     forecast_amount = Column(Numeric(precision=28, scale=8), nullable=True)
     actual_amount = Column(Numeric(precision=28, scale=8), nullable=True)
     variance_pct = Column(
         Numeric(precision=28, scale=8), nullable=True
-    )   # NULL = infinite variance
+    )  # NULL = infinite variance
     currency = Column(String(3), nullable=True)
     triggered_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     notes = Column(Text, nullable=True)

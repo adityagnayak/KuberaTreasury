@@ -52,19 +52,23 @@ def create_forecast(
     try:
         amount = Decimal(req.forecast_amount)
     except Exception:
-        raise HTTPException(status_code=422, detail="forecast_amount must be a valid decimal")
+        raise HTTPException(
+            status_code=422, detail="forecast_amount must be a valid decimal"
+        )
 
     service = LiquidityForecastingService(db)
-    service.ingest_forecast([
-        ForecastEntryInput(
-            account_id=req.account_id,
-            currency=req.currency,
-            expected_date=req.expected_date,
-            forecast_amount=amount,
-            description=req.description,
-            auto_roll_bday=req.auto_roll_bday,
-        )
-    ])
+    service.ingest_forecast(
+        [
+            ForecastEntryInput(
+                account_id=req.account_id,
+                currency=req.currency,
+                expected_date=req.expected_date,
+                forecast_amount=amount,
+                description=req.description,
+                auto_roll_bday=req.auto_roll_bday,
+            )
+        ]
+    )
     return {"status": "created"}
 
 
@@ -89,8 +93,10 @@ def get_variance_report(
         variance_pct=str(report.variance_pct) if report.variance_pct else None,
         high_priority_count=len(report.high_priority_items),
         detail_rows=[
-            {k: str(v) if not isinstance(v, (str, bool, type(None))) else v
-             for k, v in row.items()}
+            {
+                k: str(v) if not isinstance(v, (str, bool, type(None))) else v
+                for k, v in row.items()
+            }
             for row in report.detail_rows
         ],
     )

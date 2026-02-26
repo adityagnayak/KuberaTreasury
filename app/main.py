@@ -19,10 +19,12 @@ settings = get_settings()
 
 # ─── Lifespan ─────────────────────────────────────────────────────────────────
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize DB tables on startup."""
     from app.database import init_db
+
     init_db()
     yield
 
@@ -58,8 +60,11 @@ app.add_middleware(
 
 # ─── Exception handlers ───────────────────────────────────────────────────────
 
+
 @app.exception_handler(NexusTreasuryError)
-async def nexus_exception_handler(request: Request, exc: NexusTreasuryError) -> JSONResponse:
+async def nexus_exception_handler(
+    request: Request, exc: NexusTreasuryError
+) -> JSONResponse:
     return JSONResponse(
         status_code=exc.http_status_code,
         content=exc.to_dict(),
@@ -70,18 +75,26 @@ async def nexus_exception_handler(request: Request, exc: NexusTreasuryError) -> 
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     if settings.ENVIRONMENT == "development":
         import traceback
+
         return JSONResponse(
             status_code=500,
-            content={"error_code": "INTERNAL_ERROR", "message": str(exc),
-                     "traceback": traceback.format_exc()},
+            content={
+                "error_code": "INTERNAL_ERROR",
+                "message": str(exc),
+                "traceback": traceback.format_exc(),
+            },
         )
     return JSONResponse(
         status_code=500,
-        content={"error_code": "INTERNAL_ERROR", "message": "An internal error occurred."},
+        content={
+            "error_code": "INTERNAL_ERROR",
+            "message": "An internal error occurred.",
+        },
     )
 
 
 # ─── Health endpoint ──────────────────────────────────────────────────────────
+
 
 @app.get("/health", tags=["health"])
 async def health_check() -> Dict[str, Any]:
@@ -94,6 +107,7 @@ async def health_check() -> Dict[str, Any]:
 
     try:
         from app.database import engine
+
         with engine.connect() as conn:
             conn.execute(__import__("sqlalchemy").text("SELECT 1"))
         db_ok = True
@@ -102,6 +116,7 @@ async def health_check() -> Dict[str, Any]:
 
     try:
         from app.cache.fx_cache import get_redis_client
+
         redis = get_redis_client()
         redis.set("__health_check__", "1")
         cache_ok = True

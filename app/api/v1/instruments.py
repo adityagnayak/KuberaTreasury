@@ -49,7 +49,9 @@ def calculate_interest(
         principal = Decimal(req.principal)
         rate = Decimal(req.annual_rate)
     except Exception:
-        raise HTTPException(status_code=422, detail="principal and annual_rate must be decimals")
+        raise HTTPException(
+            status_code=422, detail="principal and annual_rate must be decimals"
+        )
 
     ledger = DebtInvestmentLedger()
     instrument = DebtInstrument(

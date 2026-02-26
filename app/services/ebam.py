@@ -27,7 +27,7 @@ from app.models.transactions import AuditLog
 
 @dataclass
 class ExpirationAlert:
-    item_type: str          # "mandate" | "kyc_document"
+    item_type: str  # "mandate" | "kyc_document"
     item_id: str
     owner_id: str
     expires_on: date
@@ -114,7 +114,8 @@ class EBAMService:
             raise NoMandateError(account_id)
 
         active = [
-            m for m in all_mandates
+            m
+            for m in all_mandates
             if m.status == "active" and m.valid_from <= today <= m.valid_until
         ]
         if not active:
@@ -122,8 +123,12 @@ class EBAMService:
             acct = self.session.query(BankAccount).filter_by(id=account_id).first()
             if acct:
                 acct.account_status = "expired_mandate"
-            self._log(account_id, "SYSTEM", "EXPIRED_MANDATE_BLOCKED",
-                      f"expired_on={expired.valid_until.isoformat()}")
+            self._log(
+                account_id,
+                "SYSTEM",
+                "EXPIRED_MANDATE_BLOCKED",
+                f"expired_on={expired.valid_until.isoformat()}",
+            )
             self.session.commit()
             raise ExpiredMandateError(account_id, expired.valid_until)
 
@@ -175,14 +180,16 @@ class EBAMService:
             .all()
         )
         for m in mandates:
-            alerts.append(ExpirationAlert(
-                item_type="mandate",
-                item_id=m.id,
-                owner_id=m.account_id,
-                expires_on=m.valid_until,
-                days_remaining=(m.valid_until - today).days,
-                detail=f"Signatory: {m.signatory_name}",
-            ))
+            alerts.append(
+                ExpirationAlert(
+                    item_type="mandate",
+                    item_id=m.id,
+                    owner_id=m.account_id,
+                    expires_on=m.valid_until,
+                    days_remaining=(m.valid_until - today).days,
+                    detail=f"Signatory: {m.signatory_name}",
+                )
+            )
 
         # KYC documents
         kyc_docs = (
@@ -195,14 +202,16 @@ class EBAMService:
             .all()
         )
         for d in kyc_docs:
-            alerts.append(ExpirationAlert(
-                item_type="kyc_document",
-                item_id=d.id,
-                owner_id=d.entity_id,
-                expires_on=d.expiry_date,
-                days_remaining=(d.expiry_date - today).days,
-                detail=f"Doc type: {d.doc_type}",
-            ))
+            alerts.append(
+                ExpirationAlert(
+                    item_type="kyc_document",
+                    item_id=d.id,
+                    owner_id=d.entity_id,
+                    expires_on=d.expiry_date,
+                    days_remaining=(d.expiry_date - today).days,
+                    detail=f"Doc type: {d.doc_type}",
+                )
+            )
 
         return alerts
 

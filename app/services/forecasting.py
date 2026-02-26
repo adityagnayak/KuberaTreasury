@@ -67,7 +67,7 @@ class VarianceReport:
 class LiquidityForecastingService:
     """Ingests forecasts, reconciles against actuals, produces variance reports."""
 
-    PARTIAL_MATCH_THRESHOLD = Decimal("5")   # >5% diff = PARTIALLY_MATCHED
+    PARTIAL_MATCH_THRESHOLD = Decimal("5")  # >5% diff = PARTIALLY_MATCHED
 
     def __init__(
         self,
@@ -82,7 +82,9 @@ class LiquidityForecastingService:
     def ingest_forecast(self, entries: List[ForecastEntryInput]) -> None:
         for e in entries:
             if not isinstance(e.forecast_amount, Decimal):
-                raise TypeError(f"forecast_amount must be Decimal, got {type(e.forecast_amount)}")
+                raise TypeError(
+                    f"forecast_amount must be Decimal, got {type(e.forecast_amount)}"
+                )
 
             row = ForecastEntry(
                 account_id=e.account_id,
@@ -140,8 +142,10 @@ class LiquidityForecastingService:
         matched_txn_ids: set = set()
         high_priority: List[AlertDTO] = []
         counts = {
-            "MATCHED": 0, "UNMATCHED_FORECAST": 0,
-            "UNMATCHED_ACTUAL": 0, "PARTIALLY_MATCHED": 0,
+            "MATCHED": 0,
+            "UNMATCHED_FORECAST": 0,
+            "UNMATCHED_ACTUAL": 0,
+            "PARTIALLY_MATCHED": 0,
         }
 
         for fc in forecasts:
@@ -160,7 +164,8 @@ class LiquidityForecastingService:
             actual_amount = Decimal(str(best_txn.amount))
             amount_diff_pct = (
                 abs(actual_amount - abs(fc_amount)) / abs(fc_amount) * Decimal("100")
-                if fc_amount != Decimal("0") else Decimal("100")
+                if fc_amount != Decimal("0")
+                else Decimal("100")
             )
 
             if amount_diff_pct <= self.PARTIAL_MATCH_THRESHOLD:
@@ -215,7 +220,9 @@ class LiquidityForecastingService:
             variance_pct = None
             is_high = actual_amt != Decimal("0")
         else:
-            variance_pct = abs(actual_amt - forecast_amt) / abs(forecast_amt) * Decimal("100")
+            variance_pct = (
+                abs(actual_amt - forecast_amt) / abs(forecast_amt) * Decimal("100")
+            )
             is_high = variance_pct > self._variance_threshold
 
         if not is_high:
@@ -267,8 +274,10 @@ class LiquidityForecastingService:
 
         if entity_id:
             account_ids = [
-                a.id for a in
-                self._session.query(BankAccount).filter_by(entity_id=entity_id).all()
+                a.id
+                for a in self._session.query(BankAccount)
+                .filter_by(entity_id=entity_id)
+                .all()
             ]
             query = query.filter(ForecastEntry.account_id.in_(account_ids))
 
@@ -285,9 +294,11 @@ class LiquidityForecastingService:
             actual_amount: Optional[Decimal] = None
 
             if fc.matched_transaction_id:
-                txn = self._session.query(Transaction).filter_by(
-                    id=fc.matched_transaction_id
-                ).first()
+                txn = (
+                    self._session.query(Transaction)
+                    .filter_by(id=fc.matched_transaction_id)
+                    .first()
+                )
                 if txn:
                     actual_amount = Decimal(str(txn.amount))
                     if txn.credit_debit_indicator == "DBIT":
@@ -300,32 +311,43 @@ class LiquidityForecastingService:
                 .all()
             )
             for a in alerts:
-                high_priority.append(AlertDTO(
-                    alert_id=a.id,
-                    alert_type=a.alert_type,
-                    account_id=a.account_id,
-                    forecast_amount=Decimal(str(a.forecast_amount)) if a.forecast_amount else None,
-                    actual_amount=Decimal(str(a.actual_amount)) if a.actual_amount else None,
-                    variance_pct=Decimal(str(a.variance_pct)) if a.variance_pct else None,
-                    currency=a.currency or fc.currency,
-                    triggered_at=a.triggered_at,
-                ))
+                high_priority.append(
+                    AlertDTO(
+                        alert_id=a.id,
+                        alert_type=a.alert_type,
+                        account_id=a.account_id,
+                        forecast_amount=Decimal(str(a.forecast_amount))
+                        if a.forecast_amount
+                        else None,
+                        actual_amount=Decimal(str(a.actual_amount))
+                        if a.actual_amount
+                        else None,
+                        variance_pct=Decimal(str(a.variance_pct))
+                        if a.variance_pct
+                        else None,
+                        currency=a.currency or fc.currency,
+                        triggered_at=a.triggered_at,
+                    )
+                )
 
-            detail_rows.append({
-                "forecast_id": fc.id,
-                "account_id": fc.account_id,
-                "currency": fc.currency,
-                "expected_date": fc.expected_date,
-                "forecast_amount": fc_amount,
-                "actual_amount": actual_amount,
-                "status": fc.reconciliation_status,
-                "has_alert": len(alerts) > 0,
-            })
+            detail_rows.append(
+                {
+                    "forecast_id": fc.id,
+                    "account_id": fc.account_id,
+                    "currency": fc.currency,
+                    "expected_date": fc.expected_date,
+                    "forecast_amount": fc_amount,
+                    "actual_amount": actual_amount,
+                    "status": fc.reconciliation_status,
+                    "has_alert": len(alerts) > 0,
+                }
+            )
 
         net_variance = total_actual - total_forecast
         variance_pct = (
             abs(net_variance) / abs(total_forecast) * Decimal("100")
-            if total_forecast != Decimal("0") else None
+            if total_forecast != Decimal("0")
+            else None
         )
 
         return VarianceReport(

@@ -18,7 +18,7 @@ from app.core.exceptions import InvalidBusinessDayConventionError
 CURRENCY_COUNTRY_MAP: Dict[str, str] = {
     "USD": "US",
     "GBP": "GB",
-    "EUR": "DE",   # ECB TARGET2 — Germany as proxy
+    "EUR": "DE",  # ECB TARGET2 — Germany as proxy
     "JPY": "JP",
     "CHF": "CH",
     "AUD": "AU",
@@ -35,9 +35,7 @@ class BusinessDayAdjuster:
     Conventions: 'following', 'modified_following', 'preceding'.
     """
 
-    SUPPORTED_CONVENTIONS = frozenset(
-        {"following", "modified_following", "preceding"}
-    )
+    SUPPORTED_CONVENTIONS = frozenset({"following", "modified_following", "preceding"})
 
     def __init__(self, currency: str, convention: str = "modified_following") -> None:
         country = CURRENCY_COUNTRY_MAP.get(currency.upper())

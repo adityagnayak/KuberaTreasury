@@ -8,7 +8,13 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    Column, Date, DateTime, Enum, ForeignKey, String, Text,
+    Column,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    String,
+    Text,
 )
 from sqlalchemy.orm import relationship
 
@@ -45,7 +51,7 @@ class KYCDocument(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     entity_id = Column(String(36), ForeignKey("entities.id"), nullable=False)
     doc_type = Column(String(100), nullable=False)
-    doc_hash = Column(String(64), nullable=False)   # SHA-256 hex
+    doc_hash = Column(String(64), nullable=False)  # SHA-256 hex
     expiry_date = Column(Date, nullable=True)
     upload_timestamp = Column(DateTime, nullable=False, default=datetime.utcnow)
 

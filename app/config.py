@@ -37,10 +37,10 @@ class Settings(BaseSettings):
     # ── Treasury Settings ─────────────────────────────────────────────────────
     BASE_CURRENCY: str = "EUR"
     SANCTIONS_MATCH_THRESHOLD: float = 0.85
-    VARIANCE_ALERT_THRESHOLD: float = 500.0   # percent
+    VARIANCE_ALERT_THRESHOLD: float = 500.0  # percent
 
     # ── Application Settings ──────────────────────────────────────────────────
-    ENVIRONMENT: str = "development"          # development | staging | production
+    ENVIRONMENT: str = "development"  # development | staging | production
     APP_TITLE: str = "NexusTreasury"
     APP_VERSION: str = "1.0.0"
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]

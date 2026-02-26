@@ -36,7 +36,6 @@ def rbac():
 
 
 class TestRBAC:
-
     def test_analyst_can_read(self, rbac):
         # treasury_analyst can READ transactions
         assert (
@@ -155,7 +154,6 @@ def ebam_service(db_session):
 
 
 class TestEBAM:
-
     def test_mandate_creation(
         self, db_session, ebam_account, ebam_service, analyst_keypair
     ):
@@ -290,7 +288,6 @@ class TestEBAM:
 
 
 class TestConcurrency:
-
     def test_concurrent_position_updates_consistent(self, session_factory):
         from app.models.transactions import CashPosition
 

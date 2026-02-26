@@ -20,6 +20,7 @@ getcontext().prec = 28
 
 # ─── FX Cache ─────────────────────────────────────────────────────────────────
 
+
 class FXRateCache:
     """
     Thread-safe in-memory FX rate cache.
@@ -56,13 +57,14 @@ fx_cache = FXRateCache()
 
 # ─── DTOs ─────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class CashPositionDTO:
     account_id: str
     currency: str
     as_of_date: date
     balance: Decimal
-    balance_type: str   # "value_date" | "entry_date"
+    balance_type: str  # "value_date" | "entry_date"
 
 
 @dataclass
@@ -105,6 +107,7 @@ class PoolPosition:
 
 # ─── Currency converter ───────────────────────────────────────────────────────
 
+
 class CurrencyConverter:
     def __init__(self, fx: FXRateCache) -> None:
         self._fx = fx
@@ -127,6 +130,7 @@ class CurrencyConverter:
 
 
 # ─── Physical Pool Calculator ─────────────────────────────────────────────────
+
 
 class PhysicalPoolCalculator:
     """
@@ -155,7 +159,9 @@ class PhysicalPoolCalculator:
         for account_id, currency, local_balance in members:
             base_balance = self._fx.convert(local_balance, currency, base_ccy)
             if base_balance >= Decimal("0"):
-                daily_interest = base_balance * self._config.credit_rate / Decimal("365")
+                daily_interest = (
+                    base_balance * self._config.credit_rate / Decimal("365")
+                )
                 gross_credits += base_balance
                 credit_interest += daily_interest
             else:
@@ -163,13 +169,15 @@ class PhysicalPoolCalculator:
                 gross_debits += base_balance
                 debit_interest += daily_interest
 
-            results.append(PoolMemberResult(
-                account_id=account_id,
-                currency=currency,
-                local_balance=local_balance,
-                base_currency_balance=base_balance,
-                interest_earned=daily_interest,
-            ))
+            results.append(
+                PoolMemberResult(
+                    account_id=account_id,
+                    currency=currency,
+                    local_balance=local_balance,
+                    base_currency_balance=base_balance,
+                    interest_earned=daily_interest,
+                )
+            )
 
         return PoolPosition(
             pool_id=self._config.pool_id,
@@ -184,6 +192,7 @@ class PhysicalPoolCalculator:
 
 
 # ─── Cash Positioning Service ─────────────────────────────────────────────────
+
 
 class CashPositioningService:
     def __init__(self, session: Session, fx: FXRateCache) -> None:

@@ -46,7 +46,9 @@ def compute_var(
         position_value = Decimal(req.position_value)
         confidence = Decimal(req.confidence)
     except Exception:
-        raise HTTPException(status_code=422, detail="position_value and confidence must be decimals")
+        raise HTTPException(
+            status_code=422, detail="position_value and confidence must be decimals"
+        )
 
     result = calculate_var(req.pair, position_value, confidence)
     return VaRResponse(

@@ -64,8 +64,9 @@ def build_redis_client(redis_url: Optional[str] = None):
 
     try:
         import redis as redis_lib  # type: ignore
+
         client = redis_lib.from_url(redis_url, decode_responses=True)
-        client.ping()   # verify connectivity
+        client.ping()  # verify connectivity
         return client
     except Exception:
         return InMemoryRedis()
@@ -83,6 +84,7 @@ def get_redis_client():
     global _redis_instance
     if _redis_instance is None:
         from app.config import get_settings
+
         settings = get_settings()
         _redis_instance = build_redis_client(settings.REDIS_URL)
     return _redis_instance

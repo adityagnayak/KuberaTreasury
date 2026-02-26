@@ -8,8 +8,15 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    Boolean, CheckConstraint, Column, DateTime, Enum, ForeignKey,
-    Numeric, String, Text,
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Numeric,
+    String,
+    Text,
 )
 from sqlalchemy.orm import relationship
 
@@ -43,13 +50,13 @@ class Payment(Base):
     amount = Column(Numeric(precision=28, scale=8), nullable=False)
     currency = Column(String(3), nullable=False)
     end_to_end_id = Column(String(35), nullable=False, unique=True)
-    execution_date = Column(String(10), nullable=False)   # ISO date string YYYY-MM-DD
+    execution_date = Column(String(10), nullable=False)  # ISO date string YYYY-MM-DD
     remittance_info = Column(Text, nullable=True)
 
     status = Column(String(30), nullable=False, default="DRAFT")
 
     # Cryptographic approval
-    approval_signature = Column(Text, nullable=True)           # base64 RSA-SHA256
+    approval_signature = Column(Text, nullable=True)  # base64 RSA-SHA256
     approval_public_key_pem = Column(Text, nullable=True)
     approval_public_key_fingerprint = Column(String(64), nullable=True)
     approval_timestamp = Column(DateTime, nullable=True)
@@ -79,10 +86,10 @@ class SanctionsAlert(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     payment_id = Column(String(36), ForeignKey("payments.id"), nullable=False)
-    matched_field = Column(String(50), nullable=False)   # 'name' | 'bic' | 'country'
+    matched_field = Column(String(50), nullable=False)  # 'name' | 'bic' | 'country'
     matched_value = Column(String(255), nullable=False)
     list_entry_name = Column(String(255), nullable=False)
-    list_type = Column(String(10), nullable=False)       # SDN | NONSDN
+    list_type = Column(String(10), nullable=False)  # SDN | NONSDN
     similarity_score = Column(Numeric(precision=5, scale=4), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 

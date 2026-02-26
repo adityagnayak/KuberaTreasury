@@ -103,7 +103,9 @@ def create_account(
         raise HTTPException(status_code=404, detail=f"Entity {req.entity_id} not found")
     existing = db.query(BankAccount).filter_by(iban=req.iban).first()
     if existing:
-        raise HTTPException(status_code=409, detail=f"Account with IBAN {req.iban} already exists")
+        raise HTTPException(
+            status_code=409, detail=f"Account with IBAN {req.iban} already exists"
+        )
 
     account = BankAccount(
         entity_id=req.entity_id,

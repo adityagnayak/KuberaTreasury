@@ -9,8 +9,16 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
-    Boolean, CheckConstraint, Column, DateTime, Enum,
-    ForeignKey, Numeric, String, UniqueConstraint, Date,
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Numeric,
+    String,
+    UniqueConstraint,
+    Date,
 )
 from sqlalchemy.orm import relationship
 
@@ -68,9 +76,7 @@ class BankAccount(Base):
         CheckConstraint(
             "overdraft_limit >= 0", name="ck_bank_accounts_overdraft_positive"
         ),
-        CheckConstraint(
-            "length(currency) = 3", name="ck_bank_accounts_currency_len"
-        ),
+        CheckConstraint("length(currency) = 3", name="ck_bank_accounts_currency_len"),
     )
 
     entity = relationship("Entity", back_populates="bank_accounts")
@@ -95,7 +101,10 @@ class StatementRegistry(Base):
     import_timestamp = Column(DateTime, nullable=False, default=datetime.utcnow)
     status = Column(
         Enum(
-            "pending", "processed", "failed", "duplicate",
+            "pending",
+            "processed",
+            "failed",
+            "duplicate",
             name="stmt_status_enum",
         ),
         nullable=False,
@@ -106,7 +115,8 @@ class StatementRegistry(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "message_id", "legal_sequence_number",
+            "message_id",
+            "legal_sequence_number",
             name="uq_statement_message_seq",
         ),
     )

@@ -96,13 +96,13 @@ class RBACService:
         # Check deny rules (wildcards)
         for deny_key in deny_set:
             deny_action, deny_resource = deny_key.split(":", 1)
-            if (deny_action in (action, "*") and deny_resource in (resource, "*")):
+            if deny_action in (action, "*") and deny_resource in (resource, "*"):
                 raise PermissionDeniedError(role, action, resource)
 
         # Check explicit allow
         for allow_key in allow_set:
             allow_action, allow_resource = allow_key.split(":", 1)
-            if (allow_action in (action, "*") and allow_resource in (resource, "*")):
+            if allow_action in (action, "*") and allow_resource in (resource, "*"):
                 return True
 
         # Default deny

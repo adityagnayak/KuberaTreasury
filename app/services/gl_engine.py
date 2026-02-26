@@ -36,6 +36,7 @@ ACCOUNT_CODE: Dict[str, str] = {v: k for k, v in ACCOUNTS.items()}
 
 # ─── Journal data types ───────────────────────────────────────────────────────
 
+
 @dataclass
 class JournalLine:
     account_code: str
@@ -59,15 +60,16 @@ class JournalEntry:
 @dataclass
 class TreasuryEvent:
     event_id: str
-    event_type: str   # PAYMENT_SENT | PAYMENT_RECEIVED | FX_REVALUATION |
-                      # INTEREST_ACCRUAL | LOAN_DRAWDOWN | LOAN_REPAYMENT |
-                      # HEDGE_FAIR_VALUE_CHANGE
+    event_type: str  # PAYMENT_SENT | PAYMENT_RECEIVED | FX_REVALUATION |
+    # INTEREST_ACCRUAL | LOAN_DRAWDOWN | LOAN_REPAYMENT |
+    # HEDGE_FAIR_VALUE_CHANGE
     amount: Decimal
     currency: str
     metadata: Dict
 
 
 # ─── GL Mapping Engine ────────────────────────────────────────────────────────
+
 
 class GLMappingEngine:
     """Maps treasury events to balanced double-entry journal entries."""
@@ -136,25 +138,32 @@ class GLMappingEngine:
         """
         amt = abs(event.amount)
         ccy = event.currency
-        is_negative = (
-            event.metadata.get("negative_rate", False)
-            or event.amount < Decimal("0")
-        )
+        is_negative = event.metadata.get(
+            "negative_rate", False
+        ) or event.amount < Decimal("0")
         if not is_negative:
             return [
                 self._line("Interest_Receivable", amt, Decimal("0"), ccy),
                 self._line("Interest_Income", Decimal("0"), amt, ccy),
             ]
         return [
-            self._line("Interest_Income", amt, Decimal("0"), ccy, "Negative rate reversal"),
-            self._line("Interest_Receivable", Decimal("0"), amt, ccy, "Negative rate reversal"),
+            self._line(
+                "Interest_Income", amt, Decimal("0"), ccy, "Negative rate reversal"
+            ),
+            self._line(
+                "Interest_Receivable", Decimal("0"), amt, ccy, "Negative rate reversal"
+            ),
         ]
 
     def _handle_loan_drawdown(self, event: TreasuryEvent) -> List[JournalLine]:
         amt, ccy = event.amount, event.currency
         return [
-            self._line("Bank_Account", amt, Decimal("0"), ccy, "Loan proceeds received"),
-            self._line("Loan_Payable", Decimal("0"), amt, ccy, "Loan liability created"),
+            self._line(
+                "Bank_Account", amt, Decimal("0"), ccy, "Loan proceeds received"
+            ),
+            self._line(
+                "Loan_Payable", Decimal("0"), amt, ccy, "Loan liability created"
+            ),
         ]
 
     def _handle_loan_repayment(self, event: TreasuryEvent) -> List[JournalLine]:
@@ -168,7 +177,9 @@ class GLMappingEngine:
             self._line("Bank_Account", Decimal("0"), total, ccy),
         ]
 
-    def _handle_hedge_fair_value_change(self, event: TreasuryEvent) -> List[JournalLine]:
+    def _handle_hedge_fair_value_change(
+        self, event: TreasuryEvent
+    ) -> List[JournalLine]:
         amt = event.amount
         direction = event.metadata.get("direction", "INCREASE")
         ccy = event.currency
