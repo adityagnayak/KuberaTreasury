@@ -7,7 +7,6 @@ from __future__ import annotations
 import base64
 import os
 import secrets
-from datetime import date, timedelta
 from decimal import Decimal
 from typing import Generator
 
@@ -15,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool  # <--- FIXED: Added import
+from sqlalchemy.pool import StaticPool
 
 # ─── Environment setup (before any app imports) ───────────────────────────────
 
@@ -27,23 +26,13 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
 # ─── App imports (after env is set) ───────────────────────────────────────────
 
-from app.database import Base
-from app.models.entities import (
+from app.database import Base  # noqa: E402
+from app.models.entities import (  # noqa: E402
     BankAccount,
     Entity,
-    PeriodLock,
-    StatementRegistry,
 )
-from app.models.forecasts import ForecastEntry
-from app.models.instruments import PositionLock
-from app.models.mandates import KYCDocument, Mandate
-from app.models.payments import Payment, PaymentAuditLog, SanctionsAlert
-from app.models.transactions import (
+from app.models.transactions import (  # noqa: E402
     SQLITE_TRIGGERS,
-    AuditLog,
-    CashPosition,
-    Transaction,
-    TransactionShadowArchive,
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -55,7 +44,7 @@ def _make_engine():
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
-        poolclass=StaticPool,  # <--- FIXED: Added StaticPool for concurrency
+        poolclass=StaticPool,
     )
 
     @event.listens_for(engine, "connect")

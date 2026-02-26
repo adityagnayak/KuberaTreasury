@@ -17,6 +17,7 @@ import pytest
 from sqlalchemy.exc import OperationalError
 
 from app.core.exceptions import (
+    DuplicateStatementError,
     ExpiredMandateError,
     MandateKeyMismatchError,
     NoMandateError,
@@ -25,7 +26,9 @@ from app.core.exceptions import (
 from app.models.entities import BankAccount, Entity
 from app.models.mandates import KYCDocument
 from app.services.ebam import EBAMService
+from app.services.ingestion import StatementIngestionService
 from app.services.rbac import RBACService
+from tests.conftest import build_sample_camt053
 
 # ─── RBAC Tests ───────────────────────────────────────────────────────────────
 
@@ -323,7 +326,7 @@ class TestConcurrency:
         def update_balance(delta):
             # Attempt to update with retries for SQLite locking
             # We verify rowcount to ensuring the update actually happened
-            for attempt in range(10):
+            for attempt in range(20):  # INCREASED RETRIES
                 try:
                     with session_factory() as session:
                         from sqlalchemy import text
@@ -340,8 +343,6 @@ class TestConcurrency:
                             results.append(delta)
                             return
                         else:
-                            # rowcount 0 means no row found, which shouldn't happen here unless deleted
-                            # or transaction visibility issue. We can treat as retryable or error.
                             errors.append(f"Update rowcount=0 for delta {delta}")
                             return
                 except OperationalError as e:
@@ -395,10 +396,6 @@ class TestConcurrency:
             assert final_pos.value_date_balance == expected
 
     def test_duplicate_statement_concurrent_protection(self, session_factory):
-        from app.core.exceptions import DuplicateStatementError
-        from app.services.ingestion import StatementIngestionService
-        from tests.conftest import build_sample_camt053
-
         iban = f"DE89370400440532{str(uuid.uuid4().int)[:8]}"
         with session_factory() as session:
             entity = Entity(
@@ -427,7 +424,7 @@ class TestConcurrency:
         errors = []
 
         def ingest():
-            for attempt in range(5):
+            for attempt in range(20):  # INCREASED RETRIES (was 3 or 5)
                 try:
                     svc = StatementIngestionService(session_factory())
                     svc.ingest_camt053(xml_bytes, "concurrent_user")
@@ -438,13 +435,16 @@ class TestConcurrency:
                     return
                 except OperationalError as e:
                     if "locked" in str(e).lower():
-                        time.sleep(0.05)
+                        time.sleep(0.1 + (attempt * 0.05))  # Linear backoff
                         continue
                     errors.append(str(e))
                     return
                 except Exception as e:
                     errors.append(str(e))
                     return
+
+            # Catch silent failure if retries exhausted
+            errors.append("Max retries exceeded")
 
         threads = [threading.Thread(target=ingest) for _ in range(3)]
         for t in threads:

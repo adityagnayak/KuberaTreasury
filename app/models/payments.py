@@ -8,11 +8,9 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    Boolean,
     CheckConstraint,
     Column,
     DateTime,
-    Enum,
     ForeignKey,
     Numeric,
     String,

@@ -7,7 +7,7 @@ or preceding conventions. Backed by the `holidays` library.
 from __future__ import annotations
 
 from datetime import date, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import holidays as holidays_lib
 

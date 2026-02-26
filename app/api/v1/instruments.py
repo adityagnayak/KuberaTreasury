@@ -10,10 +10,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
 from app.core.security import CurrentUser, get_current_user
-from app.database import get_db
 from app.services.debt_ledger import DebtInstrument, DebtInvestmentLedger
 from app.services.rbac import RBACService
 

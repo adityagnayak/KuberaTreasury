@@ -466,10 +466,11 @@ class PaymentService:
             (payment_req.debtor_iban, "debtor_iban"),
             (payment_req.beneficiary_iban, "beneficiary_iban"),
         ]:
-            if err := validate_iban_field(iban):
+            # FIX: Removed unused 'err :=' assignment. validate_iban_field returns truthy string on error.
+            if validate_iban_field(iban):
                 raise InvalidIBANError(iban)
 
-        if err := validate_bic_field(payment_req.beneficiary_bic):
+        if validate_bic_field(payment_req.beneficiary_bic):
             raise InvalidBICError(payment_req.beneficiary_bic)
 
         account = (

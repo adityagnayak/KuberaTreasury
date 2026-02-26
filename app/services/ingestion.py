@@ -12,9 +12,9 @@ import threading
 import unicodedata
 import uuid
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Dict, List, Optional
+from typing import List, Optional
 from xml.etree import ElementTree as ET
 
 from dateutil import parser as dateutil_parser

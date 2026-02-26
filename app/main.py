@@ -11,6 +11,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+# FIX: Imports moved to top to satisfy E402
+from app.api.v1 import accounts, forecasts, instruments, payments, positions, reports
 from app.config import get_settings
 from app.core.exceptions import NexusTreasuryError
 
@@ -133,8 +135,6 @@ async def health_check() -> Dict[str, Any]:
 
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
-
-from app.api.v1 import accounts, forecasts, instruments, payments, positions, reports
 
 API_PREFIX = "/api/v1"
 

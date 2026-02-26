@@ -21,7 +21,6 @@ from app.models.transactions import (
     AuditLog,
     CashPosition,
     Transaction,
-    TransactionShadowArchive,
 )
 from app.services.ingestion import (
     StatementIngestionService,

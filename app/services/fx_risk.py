@@ -11,7 +11,7 @@ import threading
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal, getcontext
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import holidays as holidays_lib
 

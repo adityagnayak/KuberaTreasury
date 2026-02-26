@@ -5,7 +5,6 @@ NexusTreasury — API v1: Bank Accounts
 from __future__ import annotations
 
 from typing import List, Optional
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field

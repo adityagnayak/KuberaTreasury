@@ -5,14 +5,11 @@ NexusTreasury — API v1: Reports (VaR, GL, Variance)
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
 from app.core.security import CurrentUser, get_current_user
-from app.database import get_db
 from app.services.fx_risk import calculate_var
 from app.services.gl_engine import GLMappingEngine, TreasuryEvent
 from app.services.rbac import RBACService
@@ -102,12 +99,12 @@ def post_gl_event(
         balanced=entry.balanced,
         lines=[
             {
-                "account_code": l.account_code,
-                "account_name": l.account_name,
-                "debit": str(l.debit),
-                "credit": str(l.credit),
-                "currency": l.currency,
+                "account_code": line.account_code,
+                "account_name": line.account_name,
+                "debit": str(line.debit),
+                "credit": str(line.credit),
+                "currency": line.currency,
             }
-            for l in entry.lines
+            for line in entry.lines
         ],
     )

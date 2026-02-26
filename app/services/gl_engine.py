@@ -6,10 +6,10 @@ Maps treasury events to balanced journal entries.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, getcontext
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from app.core.exceptions import UnbalancedJournalError
 
@@ -96,8 +96,8 @@ class GLMappingEngine:
         )
 
     def _assert_balanced(self, lines: List[JournalLine]) -> None:
-        total_debit = sum(l.debit for l in lines)
-        total_credit = sum(l.credit for l in lines)
+        total_debit = sum(line.debit for line in lines)
+        total_credit = sum(line.credit for line in lines)
         if total_debit != total_credit:
             raise UnbalancedJournalError(total_debit, total_credit)
 

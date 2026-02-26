@@ -89,7 +89,6 @@ class RBACService:
         if perms is None:
             raise PermissionDeniedError(role, action, resource)
 
-        key = _permission_key(action, resource)
         deny_set = perms.get("deny", set())
         allow_set = perms.get("allow", set())
 

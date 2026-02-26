@@ -10,7 +10,6 @@ from decimal import Decimal
 import pytest
 
 from app.core.exceptions import (
-    DoubleApprovalError,
     InsufficientFundsError,
     InvalidBICError,
     InvalidIBANError,
@@ -19,7 +18,6 @@ from app.core.exceptions import (
     SelfApprovalError,
 )
 from app.models.entities import BankAccount
-from app.models.payments import Payment
 from app.models.transactions import CashPosition
 from app.services.payment_factory import PaymentRequest, PaymentService
 

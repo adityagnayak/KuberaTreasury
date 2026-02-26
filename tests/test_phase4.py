@@ -8,10 +8,8 @@ FIX: calculate_var uses (pair, position_value, confidence, holding_period);
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Optional
 
 import pytest
 
@@ -242,8 +240,8 @@ def test_gl_journal_must_balance():
         metadata={},
     )
     entry = engine.post_journal(event)
-    total_debits = sum(l.debit for l in entry.lines)
-    total_credits = sum(l.credit for l in entry.lines)
+    total_debits = sum(line.debit for line in entry.lines)
+    total_credits = sum(line.credit for line in entry.lines)
     assert total_debits == total_credits
 
 
@@ -282,8 +280,8 @@ def test_negative_interest_gl_balances():
         metadata={"negative_rate": True},
     )
     entry = engine.post_journal(event)
-    total_debits = sum(l.debit for l in entry.lines)
-    total_credits = sum(l.credit for l in entry.lines)
+    total_debits = sum(line.debit for line in entry.lines)
+    total_credits = sum(line.credit for line in entry.lines)
     assert total_debits == total_credits
 
 
@@ -297,10 +295,10 @@ def test_fx_revaluation_journal_posted():
         metadata={"gain_loss": Decimal("2500.00"), "direction": "GAIN"},
     )
     entry = engine.post_journal(event)
-    account_names = [l.account_name for l in entry.lines]
+    account_names = [line.account_name for line in entry.lines]
     assert any("FX" in n or "Revaluation" in n or "PnL" in n for n in account_names)
-    total_debits = sum(l.debit for l in entry.lines)
-    total_credits = sum(l.credit for l in entry.lines)
+    total_debits = sum(line.debit for line in entry.lines)
+    total_credits = sum(line.credit for line in entry.lines)
     assert total_debits == total_credits
 
 
@@ -314,6 +312,6 @@ def test_payment_sent_journal():
         metadata={},
     )
     entry = engine.post_journal(event)
-    total_debits = sum(l.debit for l in entry.lines)
-    total_credits = sum(l.credit for l in entry.lines)
+    total_debits = sum(line.debit for line in entry.lines)
+    total_credits = sum(line.credit for line in entry.lines)
     assert total_debits == total_credits
