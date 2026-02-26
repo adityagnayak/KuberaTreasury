@@ -1,0 +1,15 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.black-formatter",
+    "charliermarsh.ruff",
+    "ms-python.mypy-type-checker",
+    "mtxr.sqltools",
+    "mtxr.sqltools-driver-sqlite",
+    "ckolkman.vscode-postgres",
+    "humao.rest-client",
+    "eamodio.gitlens",
+    "ms-python.vscode-pylance",
+    "tamasfe.even-better-toml"
+  ]
+}

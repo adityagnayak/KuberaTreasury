@@ -1,0 +1,122 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  DATABASE_URL: sqlite:///./test_nexustreasury.db
+  REDIS_URL: redis://localhost:6379/0
+  AES_KEY: dGVzdGtleXRlc3RrZXl0ZXN0a2V5dGVzdGtleXQ=
+  JWT_SECRET: test-secret-for-ci-only-not-for-production-use
+  JWT_ALGORITHM: HS256
+  JWT_EXPIRY_MINUTES: "60"
+  BASE_CURRENCY: EUR
+  SANCTIONS_MATCH_THRESHOLD: "0.85"
+  VARIANCE_ALERT_THRESHOLD: "500.0"
+  ENVIRONMENT: testing
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Black format check
+        run: black --check app/ tests/
+
+      - name: Ruff lint
+        run: ruff check app/ tests/
+
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Mypy
+        run: mypy app/ --ignore-missing-imports
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: lint
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ \
+            --cov=app \
+            --cov-report=xml \
+            --cov-fail-under=80 \
+            -v
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  deploy:
+    name: Deploy to Railway
+    runs-on: ubuntu-latest
+    needs: [typecheck, test]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service nexustreasury
