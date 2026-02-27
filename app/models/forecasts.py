@@ -29,7 +29,9 @@ class ForecastEntry(Base):
 
     __tablename__ = "forecast_entries"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, index=True, default=lambda: str(uuid.uuid4())
+    )
 
     account_id: Mapped[str] = mapped_column(
         String, ForeignKey("bank_accounts.id"), nullable=False, index=True
@@ -40,11 +42,15 @@ class ForecastEntry(Base):
 
     amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
 
-    entity_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("entities.id"), nullable=True)
+    entity_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("entities.id"), nullable=True
+    )
 
     expected_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
 
-    direction: Mapped[Optional[str]] = mapped_column(String(10), nullable=True, default="INFLOW")  # INFLOW | OUTFLOW
+    direction: Mapped[Optional[str]] = mapped_column(
+        String(10), nullable=True, default="INFLOW"
+    )  # INFLOW | OUTFLOW
 
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     category: Mapped[Optional[str]] = mapped_column(String)
@@ -81,11 +87,15 @@ class VarianceAlert(Base):
 
     __tablename__ = "variance_alerts"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, index=True, default=lambda: str(uuid.uuid4())
+    )
     alert_type: Mapped[str] = mapped_column(String, nullable=False)
 
     account_id: Mapped[Optional[str]] = mapped_column(String, index=True)
-    forecast_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("forecast_entries.id"), nullable=True)
+    forecast_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("forecast_entries.id"), nullable=True
+    )
     transaction_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     forecast_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2))

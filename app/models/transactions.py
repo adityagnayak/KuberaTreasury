@@ -46,9 +46,15 @@ END;
 class Transaction(Base):
     __tablename__ = "transactions"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
-    account_id: Mapped[str] = mapped_column(String, ForeignKey("bank_accounts.id"), nullable=False)
-    trn: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)  # Bank Reference
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, index=True, default=lambda: str(uuid.uuid4())
+    )
+    account_id: Mapped[str] = mapped_column(
+        String, ForeignKey("bank_accounts.id"), nullable=False
+    )
+    trn: Mapped[str] = mapped_column(
+        String, unique=True, index=True, nullable=False
+    )  # Bank Reference
     entry_date: Mapped[date] = mapped_column(Date, nullable=False)
     value_date: Mapped[date] = mapped_column(Date, nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
@@ -64,10 +70,14 @@ class Transaction(Base):
     )
 
     remittance_info: Mapped[Optional[str]] = mapped_column(Text)
-    statement_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("statement_registry.id"), nullable=True)
+    statement_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("statement_registry.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    account: Mapped["BankAccount"] = relationship("BankAccount", back_populates="transactions")
+    account: Mapped["BankAccount"] = relationship(
+        "BankAccount", back_populates="transactions"
+    )
 
 
 class TransactionShadowArchive(Base):
@@ -82,7 +92,9 @@ class TransactionShadowArchive(Base):
     archived_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     archived_by: Mapped[Optional[str]] = mapped_column(String)
     reason: Mapped[Optional[str]] = mapped_column(String)
-    original_data_json: Mapped[Optional[str]] = mapped_column(Text)  # Full JSON dump of original row
+    original_data_json: Mapped[Optional[str]] = mapped_column(
+        Text
+    )  # Full JSON dump of original row
 
 
 class CashPosition(Base):
@@ -93,8 +105,12 @@ class CashPosition(Base):
 
     __tablename__ = "cash_positions"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
-    account_id: Mapped[str] = mapped_column(String, ForeignKey("bank_accounts.id"), nullable=False)
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, index=True, default=lambda: str(uuid.uuid4())
+    )
+    account_id: Mapped[str] = mapped_column(
+        String, ForeignKey("bank_accounts.id"), nullable=False
+    )
     position_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
 
@@ -104,7 +120,9 @@ class CashPosition(Base):
 
     last_updated: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    account: Mapped["BankAccount"] = relationship("BankAccount", back_populates="cash_positions")
+    account: Mapped["BankAccount"] = relationship(
+        "BankAccount", back_populates="cash_positions"
+    )
 
     __table_args__ = (
         Index("ix_cash_pos_acc_date", "account_id", "position_date", unique=True),
@@ -118,7 +136,9 @@ class AuditLog(Base):
 
     __tablename__ = "audit_logs"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, index=True, default=lambda: str(uuid.uuid4())
+    )
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 

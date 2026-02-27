@@ -30,7 +30,9 @@ if TYPE_CHECKING:
 class Entity(Base):
     __tablename__ = "entities"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, index=True, default=lambda: str(uuid.uuid4())
+    )
     name: Mapped[str] = mapped_column(String, nullable=False)
     entity_type: Mapped[str] = mapped_column(
         Enum("parent", "subsidiary", "spv", name="entity_type_enum"),
@@ -42,14 +44,20 @@ class Entity(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    accounts: Mapped[List["BankAccount"]] = relationship("BankAccount", back_populates="entity")
+    accounts: Mapped[List["BankAccount"]] = relationship(
+        "BankAccount", back_populates="entity"
+    )
 
 
 class BankAccount(Base):
     __tablename__ = "bank_accounts"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
-    entity_id: Mapped[str] = mapped_column(String, ForeignKey("entities.id"), nullable=False)
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, index=True, default=lambda: str(uuid.uuid4())
+    )
+    entity_id: Mapped[str] = mapped_column(
+        String, ForeignKey("entities.id"), nullable=False
+    )
     account_number: Mapped[Optional[str]] = mapped_column(String)
     iban: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
     bic: Mapped[str] = mapped_column(String, nullable=False)
@@ -66,9 +74,15 @@ class BankAccount(Base):
     overdraft_limit: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
 
     entity: Mapped["Entity"] = relationship("Entity", back_populates="accounts")
-    transactions: Mapped[List["Transaction"]] = relationship("Transaction", back_populates="account")
-    cash_positions: Mapped[List["CashPosition"]] = relationship("CashPosition", back_populates="account")
-    payments: Mapped[List["Payment"]] = relationship("Payment", back_populates="debtor_account")
+    transactions: Mapped[List["Transaction"]] = relationship(
+        "Transaction", back_populates="account"
+    )
+    cash_positions: Mapped[List["CashPosition"]] = relationship(
+        "CashPosition", back_populates="account"
+    )
+    payments: Mapped[List["Payment"]] = relationship(
+        "Payment", back_populates="debtor_account"
+    )
 
 
 class StatementRegistry(Base):
@@ -79,13 +93,21 @@ class StatementRegistry(Base):
 
     __tablename__ = "statement_registry"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
-    account_id: Mapped[str] = mapped_column(String, ForeignKey("bank_accounts.id"), nullable=False)
-    file_hash: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, index=True, default=lambda: str(uuid.uuid4())
+    )
+    account_id: Mapped[str] = mapped_column(
+        String, ForeignKey("bank_accounts.id"), nullable=False
+    )
+    file_hash: Mapped[str] = mapped_column(
+        String, unique=True, index=True, nullable=False
+    )
     message_id: Mapped[str] = mapped_column(String, nullable=False)
     legal_sequence_number: Mapped[Optional[str]] = mapped_column(String)
     statement_date: Mapped[date] = mapped_column(Date, nullable=False)
-    import_timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    import_timestamp: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow
+    )
     imported_by: Mapped[Optional[str]] = mapped_column(String)
     format: Mapped[Optional[str]] = mapped_column(String)  # camt053 | mt940
 
@@ -100,8 +122,12 @@ class StatementGap(Base):
 
     __tablename__ = "statement_gaps"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
-    account_id: Mapped[str] = mapped_column(String, ForeignKey("bank_accounts.id"), nullable=False)
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, index=True, default=lambda: str(uuid.uuid4())
+    )
+    account_id: Mapped[str] = mapped_column(
+        String, ForeignKey("bank_accounts.id"), nullable=False
+    )
     expected_date: Mapped[date] = mapped_column(Date, nullable=False)
     detected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -115,7 +141,9 @@ class PeriodLock(Base):
 
     __tablename__ = "period_locks"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, index=True, default=lambda: str(uuid.uuid4())
+    )
     locked_until: Mapped[date] = mapped_column(Date, nullable=False)
     locked_by: Mapped[Optional[str]] = mapped_column(String)
     locked_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -129,12 +157,22 @@ class PendingPeriodAdjustment(Base):
 
     __tablename__ = "pending_period_adjustments"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
-    transaction_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("transactions.id"))
-    account_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("bank_accounts.id"))
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, index=True, default=lambda: str(uuid.uuid4())
+    )
+    transaction_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("transactions.id")
+    )
+    account_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("bank_accounts.id")
+    )
     value_date: Mapped[date] = mapped_column(Date, nullable=False)  # The locked date
-    entry_date: Mapped[date] = mapped_column(Date, nullable=False)  # When we received it
+    entry_date: Mapped[date] = mapped_column(
+        Date, nullable=False
+    )  # When we received it
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     reason: Mapped[Optional[str]] = mapped_column(String)
-    status: Mapped[Optional[str]] = mapped_column(String, default="pending")  # pending | applied
+    status: Mapped[Optional[str]] = mapped_column(
+        String, default="pending"
+    )  # pending | applied

@@ -30,7 +30,9 @@ class Payment(Base):
 
     __tablename__ = "payments"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
 
     # Maker (initiator)
     maker_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -49,24 +51,36 @@ class Payment(Base):
     beneficiary_iban: Mapped[str] = mapped_column(String(34), nullable=False)
     beneficiary_country: Mapped[str] = mapped_column(String(2), nullable=False)
 
-    amount: Mapped[Decimal] = mapped_column(Numeric(precision=28, scale=8), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(
+        Numeric(precision=28, scale=8), nullable=False
+    )
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     end_to_end_id: Mapped[str] = mapped_column(String(35), nullable=False, unique=True)
-    execution_date: Mapped[str] = mapped_column(String(10), nullable=False)  # ISO date string YYYY-MM-DD
+    execution_date: Mapped[str] = mapped_column(
+        String(10), nullable=False
+    )  # ISO date string YYYY-MM-DD
     remittance_info: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="DRAFT")
 
     # Cryptographic approval
-    approval_signature: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # base64 RSA-SHA256
+    approval_signature: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )  # base64 RSA-SHA256
     approval_public_key_pem: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    approval_public_key_fingerprint: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    approval_timestamp: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    approval_public_key_fingerprint: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True
+    )
+    approval_timestamp: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
 
     # Generated PAIN.001 XML
     pain001_xml: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     __table_args__ = (
@@ -77,8 +91,12 @@ class Payment(Base):
         CheckConstraint("amount > 0", name="ck_payments_amount_positive"),
     )
 
-    debtor_account: Mapped["BankAccount"] = relationship("BankAccount", back_populates="payments")
-    sanctions_alerts: Mapped[List["SanctionsAlert"]] = relationship("SanctionsAlert", back_populates="payment")
+    debtor_account: Mapped["BankAccount"] = relationship(
+        "BankAccount", back_populates="payments"
+    )
+    sanctions_alerts: Mapped[List["SanctionsAlert"]] = relationship(
+        "SanctionsAlert", back_populates="payment"
+    )
 
 
 class SanctionsAlert(Base):
@@ -86,16 +104,28 @@ class SanctionsAlert(Base):
 
     __tablename__ = "sanctions_alerts"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    payment_id: Mapped[str] = mapped_column(String(36), ForeignKey("payments.id"), nullable=False)
-    matched_field: Mapped[str] = mapped_column(String(50), nullable=False)  # 'name' | 'bic' | 'country'
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    payment_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("payments.id"), nullable=False
+    )
+    matched_field: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # 'name' | 'bic' | 'country'
     matched_value: Mapped[str] = mapped_column(String(255), nullable=False)
     list_entry_name: Mapped[str] = mapped_column(String(255), nullable=False)
     list_type: Mapped[str] = mapped_column(String(10), nullable=False)  # SDN | NONSDN
-    similarity_score: Mapped[Optional[Decimal]] = mapped_column(Numeric(precision=5, scale=4), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    similarity_score: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(precision=5, scale=4), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
 
-    payment: Mapped["Payment"] = relationship("Payment", back_populates="sanctions_alerts")
+    payment: Mapped["Payment"] = relationship(
+        "Payment", back_populates="sanctions_alerts"
+    )
 
 
 class PaymentAuditLog(Base):
@@ -103,11 +133,17 @@ class PaymentAuditLog(Base):
 
     __tablename__ = "payment_audit_logs"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    payment_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("payments.id"), nullable=True)
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    payment_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("payments.id"), nullable=True
+    )
     user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
 
     payment: Mapped["Payment"] = relationship("Payment")
