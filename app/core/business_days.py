@@ -6,7 +6,7 @@ Wrapper around `holidays` library to support multi-region calendars.
 from __future__ import annotations
 
 from datetime import date, timedelta
-from typing import Dict, List, Optional, cast
+from typing import Dict, List, cast
 
 import holidays
 from holidays.holiday_base import HolidayBase
