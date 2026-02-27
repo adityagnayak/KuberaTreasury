@@ -41,9 +41,9 @@ class Settings(BaseSettings):
 
     # ── Application Settings ──────────────────────────────────────────────────
     # FIX: Added "testing" to the Literal type definition
-    ENVIRONMENT: Literal["development", "staging", "production", "testing"] = (
-        "development"
-    )
+    ENVIRONMENT: Literal[
+        "development", "staging", "production", "testing"
+    ] = "development"
     APP_TITLE: str = "NexusTreasury"
     APP_VERSION: str = "1.0.0"
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
