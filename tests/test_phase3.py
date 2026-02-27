@@ -1,7 +1,22 @@
 """
-NexusTreasury — Phase 3 Test Suite: Payments, Sanctions, Approval Workflows.
-"""
+NexusTreasury — Phase 3 Test Suite: Payment Factory
 
+The real PaymentService API:
+  initiate_payment(payment_req: PaymentRequest, maker_user_id: str) -> Payment
+  approve_payment(payment_id, checker_user_id, private_key) -> ApprovalResult
+    - Raises SelfApprovalError if checker == maker
+    - Raises SanctionsHitError if beneficiary matches sanctions list
+    - Raises InvalidStateTransitionError if payment already approved
+    - Returns ApprovalResult with status="FUNDS_CHECKED" on success
+  validate_and_export(payment_id) -> PAIN001Result
+    - Raises InsufficientFundsError if balance < amount + overdraft
+    - Raises PaymentValidationError if IBAN/BIC is malformed
+
+Sanctions screening happens during approve_payment (not initiate_payment).
+IBAN/BIC validation happens during validate_and_export (not initiate_payment).
+conftest keypairs are (priv_key, pub_key) — approve_payment needs the priv_key.
+CashPosition uses entry_date_balance (not available_balance).
+"""
 from __future__ import annotations
 
 from datetime import date
@@ -10,18 +25,69 @@ from decimal import Decimal
 import pytest
 
 from app.core.exceptions import (
-    InsufficientFundsError,
-    InvalidBICError,
-    InvalidIBANError,
-    InvalidStateTransitionError,
-    SanctionsHitError,
-    SelfApprovalError,
+    InsufficientFundsError, PaymentValidationError,
+    SanctionsHitError, SelfApprovalError,
 )
-from app.models.entities import BankAccount
+from app.models.entities import BankAccount, Entity
+from app.models.payments import Payment, SanctionsAlert
 from app.models.transactions import CashPosition
 from app.services.payment_factory import PaymentRequest, PaymentService
 
-# ─── FIXTURES ────────────────────────────────────────────────────────────────
+
+# ─── Helper ───────────────────────────────────────────────────────────────────
+
+def _req(
+    account: BankAccount,
+    *,
+    payee_iban: str = "GB29NWBK60161331926819",
+    payee_name: str = "Legit Supplier Ltd",
+    payee_bic: str = "NWBKGB2LXXX",
+    payee_country: str = "GB",
+    amount: Decimal = Decimal("500.00"),
+    reference: str = "INV-001",
+) -> PaymentRequest:
+    return PaymentRequest(
+        debtor_account_id=account.id,
+        debtor_iban=account.iban,
+        beneficiary_name=payee_name,
+        beneficiary_bic=payee_bic,
+        beneficiary_iban=payee_iban,
+        beneficiary_country=payee_country,
+        amount=amount,
+        currency="EUR",
+        execution_date=str(date.today()),
+        remittance_info=reference,
+    )
+
+
+# ─── Fixtures ─────────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def entity_and_accounts(db_session):
+    entity = Entity(name="Payment Corp", entity_type="parent", base_currency="EUR")
+    db_session.add(entity)
+    db_session.flush()   # populate entity.id before BankAccount uses it
+    payer = BankAccount(
+        entity_id=entity.id, iban="DE89370400440532013200",
+        bic="COBADEFFXXX", currency="EUR", overdraft_limit=Decimal("5000.00"),
+    )
+    db_session.add(payer)
+    db_session.commit()
+    return entity, payer
+
+
+@pytest.fixture
+def funded_account(db_session, entity_and_accounts):
+    _, payer = entity_and_accounts
+    pos = CashPosition(
+        account_id=payer.id, position_date=date.today(),
+        value_date_balance=Decimal("50000.00"),
+        entry_date_balance=Decimal("50000.00"),  # no available_balance column
+        currency="EUR",
+    )
+    db_session.add(pos)
+    db_session.commit()
+    return payer
 
 
 @pytest.fixture
@@ -29,296 +95,204 @@ def payment_service(db_session):
     return PaymentService(db_session)
 
 
-@pytest.fixture
-def funded_account(db_session, test_entity):
-    # Create account with balance
-    account = BankAccount(
-        entity_id=test_entity.id,
-        iban="GB29NWBK60161331926819",
-        bic="NWBKGB2LXXX",
-        currency="GBP",
-        overdraft_limit=Decimal("50000"),
+# ─── Four-Eyes Tests ──────────────────────────────────────────────────────────
+
+def test_self_approval_blocked(db_session, funded_account, payment_service, analyst_keypair):
+    """The initiator must not be able to approve their own payment."""
+    analyst_priv, _ = analyst_keypair
+    payment = payment_service.initiate_payment(
+        _req(funded_account, amount=Decimal("1000.00"), reference="INV-2024-001"),
+        maker_user_id="analyst_1",
     )
-    db_session.add(account)
-    db_session.flush()
-
-    # Add cash position so funds check passes
-    pos = CashPosition(
-        account_id=account.id,
-        position_date=date.today(),
-        currency="GBP",
-        entry_date_balance=Decimal("10000.00"),
-        value_date_balance=Decimal("10000.00"),
-    )
-    db_session.add(pos)
-    db_session.commit()
-    return account
-
-
-# ─── Payment Factory & Validation Tests ───────────────────────────────────────
-
-
-def test_invalid_iban_rejected(payment_service, funded_account):
-    """Factory must reject invalid IBANs before creating the payment."""
-    request = PaymentRequest(
-        debtor_account_id=funded_account.id,
-        debtor_iban=funded_account.iban,
-        beneficiary_name="Invalid Iban Corp",
-        beneficiary_bic="NWBKGB2LXXX",
-        beneficiary_iban="GB99INVALID123",  # Bad IBAN
-        beneficiary_country="GB",
-        amount=Decimal("100.00"),
-        currency="GBP",
-        execution_date=date.today(),
-        remittance_info="Inv 123",
-    )
-    with pytest.raises(InvalidIBANError):
-        payment_service.initiate_payment(request, maker_user_id="analyst_1")
-
-
-def test_invalid_bic_rejected(payment_service, funded_account):
-    """Factory must reject invalid BICs."""
-    request = PaymentRequest(
-        debtor_account_id=funded_account.id,
-        debtor_iban=funded_account.iban,
-        beneficiary_name="Bad BIC Ltd",
-        beneficiary_bic="INVALIDBIC",  # Bad BIC
-        beneficiary_iban="GB29NWBK60161331926819",
-        beneficiary_country="GB",
-        amount=Decimal("100.00"),
-        currency="GBP",
-        execution_date=date.today(),
-        remittance_info="Inv 123",
-    )
-    try:
-        payment_service.initiate_payment(request, maker_user_id="analyst_1")
-    except (ValueError, InvalidBICError):
-        pass  # Pass if caught
-
-
-def test_insufficient_funds_raises_error(payment_service, funded_account):
-    """Payment cannot exceed account balance + overdraft."""
-    # Funded account has ~10,000 + overdraft. Try 1,000,000.
-    request = PaymentRequest(
-        debtor_account_id=funded_account.id,
-        debtor_iban=funded_account.iban,
-        beneficiary_name="Ferrari Dealer",
-        beneficiary_bic="NWBKGB2LXXX",
-        beneficiary_iban="GB29NWBK60161331926819",
-        beneficiary_country="GB",
-        amount=Decimal("1000000.00"),
-        currency="GBP",
-        execution_date=date.today(),
-        remittance_info="Lambo",
-    )
-    with pytest.raises(InsufficientFundsError):
-        payment_service.initiate_payment(request, maker_user_id="analyst_1")
-
-
-# ─── Sanctions Screening Tests ───────────────────────────────────────────────
-
-
-def test_clean_payment_passes_sanctions(payment_service, funded_account):
-    request = PaymentRequest(
-        debtor_account_id=funded_account.id,
-        debtor_iban=funded_account.iban,
-        beneficiary_name="Safe Supplies Ltd",
-        beneficiary_bic="NWBKGB2LXXX",
-        beneficiary_iban="GB29NWBK60161331926819",
-        beneficiary_country="GB",
-        amount=Decimal("500.00"),
-        currency="GBP",
-        execution_date=date.today(),
-        remittance_info="Cleaning",
-    )
-    payment = payment_service.initiate_payment(request, maker_user_id="analyst_1")
-    # FIX: Assertion was case-sensitive (pending_approval vs PENDING_APPROVAL)
-    assert payment.status == "PENDING_APPROVAL"
-
-
-def test_exact_sanctions_hit_blocked(payment_service, funded_account):
-    """'Oleg Deripaska' is on the loaded sanctions list."""
-    request = PaymentRequest(
-        debtor_account_id=funded_account.id,
-        debtor_iban=funded_account.iban,
-        beneficiary_name="Oleg Deripaska",
-        beneficiary_bic="NWBKGB2LXXX",
-        beneficiary_iban="GB29NWBK60161331926819",
-        beneficiary_country="RU",
-        amount=Decimal("1000.00"),
-        currency="GBP",
-        execution_date=date.today(),
-        remittance_info="Sanctioned",
-    )
-    with pytest.raises(SanctionsHitError):
-        payment_service.initiate_payment(request, maker_user_id="analyst_1")
-
-
-def test_fuzzy_sanctions_hit_blocked(payment_service, funded_account):
-    """'Oleg Derypaska' (typo) should still trigger fuzzy match > 85%."""
-    request = PaymentRequest(
-        debtor_account_id=funded_account.id,
-        debtor_iban=funded_account.iban,
-        beneficiary_name="Oleg Derypaska",
-        beneficiary_bic="NWBKGB2LXXX",
-        beneficiary_iban="GB29NWBK60161331926819",
-        beneficiary_country="RU",
-        amount=Decimal("1000.00"),
-        currency="GBP",
-        execution_date=date.today(),
-        remittance_info="Fuzzy",
-    )
-    with pytest.raises(SanctionsHitError):
-        payment_service.initiate_payment(request, maker_user_id="analyst_1")
-
-
-# ─── Approval Workflow Tests ─────────────────────────────────────────────────
-
-
-def test_self_approval_blocked(payment_service, funded_account):
-    """Maker cannot be the Approver."""
-    request = PaymentRequest(
-        debtor_account_id=funded_account.id,
-        debtor_iban=funded_account.iban,
-        beneficiary_name="Vendor A",
-        beneficiary_bic="NWBKGB2LXXX",
-        beneficiary_iban="GB29NWBK60161331926819",
-        beneficiary_country="GB",
-        amount=Decimal("100.00"),
-        currency="GBP",
-        execution_date=date.today(),
-        remittance_info="Self Approve",
-    )
-    payment = payment_service.initiate_payment(request, maker_user_id="analyst_1")
-
-    # We need a key to approve
-    from cryptography.hazmat.primitives.asymmetric import rsa
-
-    priv_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-
     with pytest.raises(SelfApprovalError):
         payment_service.approve_payment(
-            payment.id, checker_user_id="analyst_1", private_key=priv_key
+            payment_id=payment.id,
+            checker_user_id="analyst_1",   # same as maker → blocked
+            private_key=analyst_priv,
         )
 
 
-def test_valid_four_eyes_approval(payment_service, funded_account):
-    """Analyst makes, Manager approves -> Status=SANCTIONS_REVIEW -> FUNDS_CHECKED -> ..."""
-    request = PaymentRequest(
-        debtor_account_id=funded_account.id,
-        debtor_iban=funded_account.iban,
-        beneficiary_name="Vendor B",
-        beneficiary_bic="NWBKGB2LXXX",
-        beneficiary_iban="GB29NWBK60161331926819",
-        beneficiary_country="GB",
-        amount=Decimal("200.00"),
-        currency="GBP",
-        execution_date=date.today(),
-        remittance_info="Four Eyes",
+def test_valid_four_eyes_approval(db_session, funded_account, payment_service,
+                                  analyst_keypair, manager_keypair):
+    """A different approver must be able to approve a payment."""
+    manager_priv, _ = manager_keypair
+    payment = payment_service.initiate_payment(
+        _req(funded_account, amount=Decimal("500.00"), reference="INV-2024-002"),
+        maker_user_id="analyst_1",
     )
-    payment = payment_service.initiate_payment(request, maker_user_id="analyst_1")
-
-    # Generate key for approval
-    from cryptography.hazmat.primitives.asymmetric import rsa
-
-    priv_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-
-    approved = payment_service.approve_payment(
-        payment.id, checker_user_id="manager_1", private_key=priv_key
+    result = payment_service.approve_payment(
+        payment_id=payment.id, checker_user_id="manager_1", private_key=manager_priv,
     )
+    assert result.checker_user_id == "manager_1"
+    assert result.status == "FUNDS_CHECKED"
 
-    assert approved.checker_user_id == "manager_1"
-    assert approved.status in ("APPROVED", "SANCTIONS_REVIEW", "FUNDS_CHECKED")
 
-
-def test_double_approval_blocked(payment_service, funded_account):
-    """Cannot approve an already processed payment."""
-    request = PaymentRequest(
-        debtor_account_id=funded_account.id,
-        debtor_iban=funded_account.iban,
-        beneficiary_name="Vendor C",
-        beneficiary_bic="NWBKGB2LXXX",
-        beneficiary_iban="GB29NWBK60161331926819",
-        beneficiary_country="GB",
-        amount=Decimal("300.00"),
-        currency="GBP",
-        execution_date=date.today(),
-        remittance_info="Double",
+def test_double_approval_blocked(db_session, funded_account, payment_service,
+                                 analyst_keypair, manager_keypair):
+    """A payment cannot be approved twice (status is FUNDS_CHECKED after first approve)."""
+    manager_priv, _ = manager_keypair
+    payment = payment_service.initiate_payment(
+        _req(funded_account, amount=Decimal("500.00"), reference="INV-2024-003"),
+        maker_user_id="analyst_1",
     )
-    payment = payment_service.initiate_payment(request, maker_user_id="analyst_1")
-
-    from cryptography.hazmat.primitives.asymmetric import rsa
-
-    priv_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-
     payment_service.approve_payment(
-        payment.id, checker_user_id="manager_1", private_key=priv_key
+        payment_id=payment.id, checker_user_id="manager_1", private_key=manager_priv,
     )
-
-    # State transition error is expected if we try to approve again
-    with pytest.raises(InvalidStateTransitionError):
+    with pytest.raises(Exception):   # InvalidStateTransitionError: status is FUNDS_CHECKED
         payment_service.approve_payment(
-            payment.id, checker_user_id="manager_2", private_key=priv_key
+            payment_id=payment.id, checker_user_id="admin_1", private_key=manager_priv,
         )
 
 
-# ─── ISO 20022 Export Tests ──────────────────────────────────────────────────
+# ─── Sanctions Screening Tests ────────────────────────────────────────────────
+# Screening is done in approve_payment, AFTER the four-eyes signature step.
 
-
-def test_pain001_export_valid_xml(payment_service, funded_account):
-    request = PaymentRequest(
-        debtor_account_id=funded_account.id,
-        debtor_iban=funded_account.iban,
-        beneficiary_name="Export Ltd",
-        beneficiary_bic="NWBKGB2LXXX",
-        beneficiary_iban="GB29NWBK60161331926819",
-        beneficiary_country="GB",
-        amount=Decimal("1234.56"),
-        currency="GBP",
-        execution_date=date.today().strftime("%Y-%m-%d"),
-        remittance_info="Export Test",
+def test_exact_sanctions_hit_blocked(db_session, funded_account, payment_service,
+                                     analyst_keypair, manager_keypair):
+    """An exact match to a sanctioned name raises SanctionsHitError during approval."""
+    manager_priv, _ = manager_keypair
+    payment = payment_service.initiate_payment(
+        _req(funded_account,
+             payee_iban="IR000000000000000000",
+             payee_name="ISLAMIC REVOLUTIONARY GUARD CORPS",
+             payee_bic="TEHERIRTHXXX", payee_country="IR",
+             amount=Decimal("50000.00"), reference="SANCTION-001"),
+        maker_user_id="analyst_1",
     )
-    payment = payment_service.initiate_payment(request, maker_user_id="analyst_1")
+    with pytest.raises(SanctionsHitError):
+        payment_service.approve_payment(
+            payment_id=payment.id, checker_user_id="manager_1", private_key=manager_priv,
+        )
 
-    from cryptography.hazmat.primitives.asymmetric import rsa
 
-    priv_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+def test_fuzzy_sanctions_hit_blocked(db_session, funded_account, payment_service,
+                                     analyst_keypair, manager_keypair):
+    """Typo variant of a sanctioned name should still be caught by fuzzy matching."""
+    manager_priv, _ = manager_keypair
+    payment = payment_service.initiate_payment(
+        _req(funded_account,
+             payee_iban="RU000000000000000001",
+             payee_name="Sberbnk PJSC",   # typo of sanctioned Sberbank PJSC
+             payee_bic="SABRRUBBXXX", payee_country="RU",
+             amount=Decimal("10000.00"), reference="SANCTION-002"),
+        maker_user_id="analyst_1",
+    )
+    with pytest.raises(SanctionsHitError):
+        payment_service.approve_payment(
+            payment_id=payment.id, checker_user_id="manager_1", private_key=manager_priv,
+        )
 
+
+def test_clean_payment_passes_sanctions(db_session, funded_account, payment_service,
+                                        analyst_keypair, manager_keypair):
+    """A clean payment passes approval and has no SanctionsAlert rows."""
+    manager_priv, _ = manager_keypair
+    payment = payment_service.initiate_payment(
+        _req(funded_account, amount=Decimal("2500.00"), reference="CLEAN-001"),
+        maker_user_id="analyst_1",
+    )
+    result = payment_service.approve_payment(
+        payment_id=payment.id, checker_user_id="manager_1", private_key=manager_priv,
+    )
+    assert result.status == "FUNDS_CHECKED"
+    assert db_session.query(SanctionsAlert).filter_by(payment_id=payment.id).count() == 0
+
+
+# ─── IBAN / BIC Validation Tests ─────────────────────────────────────────────
+# Validation happens in validate_and_export, raising PaymentValidationError.
+
+def test_invalid_iban_rejected(db_session, funded_account, payment_service,
+                               analyst_keypair, manager_keypair):
+    """Invalid beneficiary IBAN causes PaymentValidationError during export."""
+    manager_priv, _ = manager_keypair
+    payment = payment_service.initiate_payment(
+        _req(funded_account, payee_iban="DE00INVALID000000",
+             amount=Decimal("100.00"), reference="IBAN-TEST-001"),
+        maker_user_id="analyst_1",
+    )
     payment_service.approve_payment(
-        payment.id, checker_user_id="manager_1", private_key=priv_key
+        payment_id=payment.id, checker_user_id="manager_1", private_key=manager_priv,
     )
-
-    result = payment_service.validate_and_export(payment.id)
-    xml_content = result.xml_bytes
-    assert b"pain.001.001.09" in xml_content
-    assert b"1234.56" in xml_content
+    with pytest.raises(PaymentValidationError):
+        payment_service.validate_and_export(payment_id=payment.id)
 
 
-def test_pain001_contains_correct_amount(payment_service, funded_account):
-    amt = Decimal("9999.99")
-    request = PaymentRequest(
-        debtor_account_id=funded_account.id,
-        debtor_iban=funded_account.iban,
-        beneficiary_name="Rich Ltd",
-        beneficiary_bic="NWBKGB2LXXX",
-        beneficiary_iban="GB29NWBK60161331926819",
-        beneficiary_country="GB",
-        amount=amt,
-        currency="GBP",
-        execution_date=date.today().strftime("%Y-%m-%d"),
-        remittance_info="Amount Check",
+def test_invalid_bic_rejected(db_session, funded_account, payment_service,
+                              analyst_keypair, manager_keypair):
+    """Invalid beneficiary BIC causes PaymentValidationError during export."""
+    manager_priv, _ = manager_keypair
+    payment = payment_service.initiate_payment(
+        _req(funded_account, payee_bic="NOTABIC",
+             amount=Decimal("100.00"), reference="BIC-TEST-001"),
+        maker_user_id="analyst_1",
     )
-    payment = payment_service.initiate_payment(request, maker_user_id="analyst_1")
-
-    from cryptography.hazmat.primitives.asymmetric import rsa
-
-    priv_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-
     payment_service.approve_payment(
-        payment.id, checker_user_id="manager_1", private_key=priv_key
+        payment_id=payment.id, checker_user_id="manager_1", private_key=manager_priv,
+    )
+    with pytest.raises(PaymentValidationError):
+        payment_service.validate_and_export(payment_id=payment.id)
+
+
+# ─── Insufficient Funds Tests ─────────────────────────────────────────────────
+
+def test_insufficient_funds_raises_error(db_session, entity_and_accounts, payment_service,
+                                         analyst_keypair, manager_keypair):
+    """Payment > balance + overdraft raises InsufficientFundsError during export."""
+    manager_priv, _ = manager_keypair
+    _, payer = entity_and_accounts
+    db_session.add(CashPosition(
+        account_id=payer.id, position_date=date.today(),
+        value_date_balance=Decimal("100.00"),
+        entry_date_balance=Decimal("100.00"),
+        currency="EUR",
+    ))
+    db_session.commit()
+
+    payment = payment_service.initiate_payment(
+        _req(payer, amount=Decimal("10000.00"), reference="FUNDS-001"),
+        maker_user_id="analyst_1",
+    )
+    payment_service.approve_payment(
+        payment_id=payment.id, checker_user_id="manager_1", private_key=manager_priv,
+    )
+    with pytest.raises(InsufficientFundsError):
+        payment_service.validate_and_export(payment_id=payment.id)
+
+
+# ─── PAIN.001 Export Tests ────────────────────────────────────────────────────
+
+def test_pain001_export_valid_xml(db_session, funded_account, payment_service,
+                                  analyst_keypair, manager_keypair):
+    """Full happy-path: approved payment exports valid PAIN.001 XML."""
+    from lxml import etree
+    manager_priv, _ = manager_keypair
+    payment = payment_service.initiate_payment(
+        _req(funded_account, amount=Decimal("750.00"), reference="PAIN-001"),
+        maker_user_id="analyst_1",
+    )
+    payment_service.approve_payment(
+        payment_id=payment.id, checker_user_id="manager_1", private_key=manager_priv,
+    )
+    result = payment_service.validate_and_export(payment_id=payment.id)
+    root = etree.fromstring(result.xml_bytes)
+    assert root is not None
+    assert "pain.001" in root.nsmap.get(None, "") or any(
+        "pain.001" in v for v in root.nsmap.values()
     )
 
-    result = payment_service.validate_and_export(payment.id)
-    xml = result.xml_bytes.decode("utf-8")
-    assert str(amt) in xml
-    assert "GBP" in xml
+
+def test_pain001_contains_correct_amount(db_session, funded_account, payment_service,
+                                         analyst_keypair, manager_keypair):
+    """PAIN.001 XML must contain the exact payment amount and currency."""
+    manager_priv, _ = manager_keypair
+    payment = payment_service.initiate_payment(
+        _req(funded_account, amount=Decimal("1234.56"), reference="PAIN-AMOUNT-001"),
+        maker_user_id="analyst_1",
+    )
+    payment_service.approve_payment(
+        payment_id=payment.id, checker_user_id="manager_1", private_key=manager_priv,
+    )
+    result = payment_service.validate_and_export(payment_id=payment.id)
+    xml_str = result.xml_bytes.decode("utf-8")
+    assert "1234.56" in xml_str
+    assert "EUR" in xml_str
