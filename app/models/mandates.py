@@ -6,10 +6,10 @@ Bank Mandates and Signatory Management.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
+from typing import Optional
 
 from sqlalchemy import (
-    Column,
     Date,
     DateTime,
     Enum,
@@ -17,7 +17,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
@@ -29,33 +29,31 @@ class Mandate(Base):
 
     __tablename__ = "mandates"
 
-    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
-    account_id = Column(String, ForeignKey("bank_accounts.id"), nullable=False)
+    id: Mapped[str] = mapped_column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    account_id: Mapped[str] = mapped_column(String, ForeignKey("bank_accounts.id"), nullable=False)
 
-    signatory_name = Column(String, nullable=False)
-    signatory_user_id = Column(String, nullable=True)  # Link to IAM user
+    signatory_name: Mapped[str] = mapped_column(String, nullable=False)
+    signatory_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # Link to IAM user
 
-    status: Column[str] = Column(
+    status: Mapped[str] = mapped_column(
         Enum("active", "revoked", "expired", name="mandate_status_enum"),
         default="active",
         nullable=False,
     )
 
-    role = Column(String)  # e.g., "A-Signatory", "B-Signatory"
-    limit_currency = Column(String(3))
-    single_payment_limit = Column(
-        String
-    )  # stored as string decimal to avoid precision loss
+    role: Mapped[Optional[str]] = mapped_column(String)  # e.g., "A-Signatory", "B-Signatory"
+    limit_currency: Mapped[Optional[str]] = mapped_column(String(3))
+    single_payment_limit: Mapped[Optional[str]] = mapped_column(String)  # stored as string decimal
 
-    valid_from = Column(Date, nullable=False)
-    valid_until = Column(Date, nullable=True)
+    valid_from: Mapped[date] = mapped_column(Date, nullable=False)
+    valid_until: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
-    public_key_pem = Column(Text, nullable=True)  # For digital signature verification
+    public_key_pem: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # For digital signature verification
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    documents = relationship("KYCDocument", back_populates="mandate")
+    documents: Mapped[list["KYCDocument"]] = relationship("KYCDocument", back_populates="mandate")
 
 
 class KYCDocument(Base):
@@ -65,22 +63,16 @@ class KYCDocument(Base):
 
     __tablename__ = "kyc_documents"
 
-    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
-    mandate_id = Column(String, ForeignKey("mandates.id"), nullable=True)
-    entity_id = Column(String, ForeignKey("entities.id"), nullable=True)
+    id: Mapped[str] = mapped_column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    mandate_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("mandates.id"), nullable=True)
+    entity_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("entities.id"), nullable=True)
 
-    doc_type = Column(String, nullable=False)  # PASSPORT | UTILITY_BILL
+    doc_type: Mapped[str] = mapped_column(String, nullable=False)  # PASSPORT | UTILITY_BILL
 
-    # FIX: Was nullable=False, but register_kyc_document() doesn't accept a
-    # file_reference parameter — it stores doc_bytes and computes a hash.
-    # The service has no S3/file-store in tests; making this nullable lets
-    # register_kyc_document() insert the row successfully.  If the service
-    # sets file_reference internally it will still be stored; if not, NULL is
-    # acceptable.
-    file_reference = Column(String, nullable=True)  # S3 key or internal path
+    file_reference: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # S3 key or internal path
 
-    expiry_date = Column(Date, nullable=True)
-    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    expiry_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    mandate = relationship("Mandate", back_populates="documents")
-    doc_hash = Column(String(64), nullable=True)
+    mandate: Mapped[Optional["Mandate"]] = relationship("Mandate", back_populates="documents")
+    doc_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
