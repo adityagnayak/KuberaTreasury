@@ -9,7 +9,7 @@ on:
 env:
   DATABASE_URL: sqlite:///./test_nexustreasury.db
   REDIS_URL: redis://localhost:6379/0
-  AES_KEY: dGVzdGtleXRlc3RrZXl0ZXN0a2V5dGVzdGtleXQ=
+  AES_KEY: EjYdzOAH1J5NcmXY1qmQNCgeJsL4cftzVTagFYqdvqA=
   JWT_SECRET: test-secret-for-ci-only-not-for-production-use
   JWT_ALGORITHM: HS256
   JWT_EXPIRY_MINUTES: "60"
@@ -63,7 +63,7 @@ jobs:
       # types-python-dateutil — resolves the dateutil import-untyped error in ingestion.py.
       - name: Install type stubs
         run: |
-          pip install sqlalchemy2-stubs types-python-dateutil
+          pip install types-python-dateutil
 
       # FIX: Remove --ignore-missing-imports from the command line.
       # mypy.ini (added to repo root) now owns all mypy config including
