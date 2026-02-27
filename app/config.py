@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     # ── Encryption / Auth ─────────────────────────────────────────────────────
     # AES_KEY must be 32 bytes, base64-encoded
-    AES_KEY: str = "7qHjN6QM/J1+ERyZClw84rdmVPeJlIZmjBTd34j3uV4="
+    AES_KEY: str = "EjYdzOAH1J5NcmXY1qmQNCgeJsL4cftzVTagFYqdvqA="
     JWT_SECRET: str = "8e3800cfd736f227674efd7aaec087cf16074d8d3d773c595192fef9e0e7143f"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRY_MINUTES: int = 60

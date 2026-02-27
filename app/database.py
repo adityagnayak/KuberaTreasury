@@ -28,7 +28,7 @@ def _build_engine(database_url: str) -> Engine:
         # SQLite uses SingletonThreadPool — pool_size/max_overflow are not supported
         engine = create_engine(
             database_url,
-            connect_args={"check_same_thread": False},
+            connect_args={"check_same_thread": False, "timeout": 30},
             echo=False,
         )
 
