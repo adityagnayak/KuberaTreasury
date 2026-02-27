@@ -1,0 +1,18 @@
+[run]
+# Measure branch coverage
+branch = True
+# Allow coverage to track code in threads (CRITICAL for test_phase5.py)
+concurrency = thread
+# Source directories to measure
+source = app
+
+[report]
+# Do not report files that are 100% covered
+skip_covered = False
+# Fail if coverage is below this threshold (matches your CI goal)
+fail_under = 65
+# Exclude specific lines/files
+omit =
+    tests/*
+    scripts/*
+    app/config.py
