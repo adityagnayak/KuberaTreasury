@@ -151,7 +151,8 @@ def validate_bic_field(bic: str) -> Optional[str]:
 
 def generate_rsa_keypair() -> tuple[RSAPrivateKey, RSAPublicKey]:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    return private_key, private_key.public_key()
+    pub_key = cast(RSAPublicKey, private_key.public_key())
+    return private_key, pub_key
 
 
 def sign_approval(

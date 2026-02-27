@@ -5,11 +5,11 @@ NexusTreasury — Phase 1 & 2 Models: Entities, Accounts, Ingestion Registry
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import (
     Boolean,
-    Column,
     Date,
     DateTime,
     Enum,
@@ -17,55 +17,71 @@ from sqlalchemy import (
     Numeric,
     String,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.payments import Payment
+    from app.models.transactions import CashPosition, Transaction
 
 
 class Entity(Base):
     __tablename__ = "entities"
 
-    # FIX: Added default UUID
-    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String, nullable=False)
-    entity_type: Column[str] = Column(
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, index=True, default=lambda: str(uuid.uuid4())
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    entity_type: Mapped[str] = mapped_column(
         Enum("parent", "subsidiary", "spv", name="entity_type_enum"),
         nullable=False,
         default="subsidiary",
     )
-    country_code = Column(String(2))
-    base_currency = Column(String(3), nullable=False, default="EUR")
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    country_code: Mapped[Optional[str]] = mapped_column(String(2))
+    base_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="EUR")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    accounts = relationship("BankAccount", back_populates="entity")
+    accounts: Mapped[List["BankAccount"]] = relationship(
+        "BankAccount", back_populates="entity"
+    )
 
 
 class BankAccount(Base):
     __tablename__ = "bank_accounts"
 
-    # FIX: Added default UUID
-    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
-    entity_id = Column(String, ForeignKey("entities.id"), nullable=False)
-    account_number = Column(String)
-    iban = Column(String, unique=True, index=True, nullable=False)
-    bic = Column(String, nullable=False)
-    account_name = Column(String)
-    currency = Column(String(3), nullable=False)
-    bank_name = Column(String)
-    country_code = Column(String(2))
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, index=True, default=lambda: str(uuid.uuid4())
+    )
+    entity_id: Mapped[str] = mapped_column(
+        String, ForeignKey("entities.id"), nullable=False
+    )
+    account_number: Mapped[Optional[str]] = mapped_column(String)
+    iban: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
+    bic: Mapped[str] = mapped_column(String, nullable=False)
+    account_name: Mapped[Optional[str]] = mapped_column(String)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    bank_name: Mapped[Optional[str]] = mapped_column(String)
+    country_code: Mapped[Optional[str]] = mapped_column(String(2))
 
-    account_status: Column[str] = Column(
+    account_status: Mapped[str] = mapped_column(
         Enum("active", "closed", "blocked", name="account_status_enum"),
         default="active",
         nullable=False,
     )
-    overdraft_limit = Column(Numeric(18, 2), default=0)
+    overdraft_limit: Mapped[Numeric] = mapped_column(Numeric(18, 2), default=0)
 
-    entity = relationship("Entity", back_populates="accounts")
-    transactions = relationship("Transaction", back_populates="account")
-    cash_positions = relationship("CashPosition", back_populates="account")
-    payments = relationship("Payment", back_populates="debtor_account")
+    entity: Mapped["Entity"] = relationship("Entity", back_populates="accounts")
+    transactions: Mapped[List["Transaction"]] = relationship(
+        "Transaction", back_populates="account"
+    )
+    cash_positions: Mapped[List["CashPosition"]] = relationship(
+        "CashPosition", back_populates="account"
+    )
+    payments: Mapped[List["Payment"]] = relationship(
+        "Payment", back_populates="debtor_account"
+    )
 
 
 class StatementRegistry(Base):
@@ -76,18 +92,25 @@ class StatementRegistry(Base):
 
     __tablename__ = "statement_registry"
 
-    # FIX: Added default UUID
-    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
-    account_id = Column(String, ForeignKey("bank_accounts.id"), nullable=False)
-    file_hash = Column(String, unique=True, index=True, nullable=False)
-    message_id = Column(String, nullable=False)
-    legal_sequence_number = Column(String)
-    statement_date = Column(Date, nullable=False)
-    import_timestamp = Column(DateTime, default=datetime.utcnow)
-    imported_by = Column(String)
-    format = Column(String)  # camt053 | mt940
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, index=True, default=lambda: str(uuid.uuid4())
+    )
+    account_id: Mapped[str] = mapped_column(
+        String, ForeignKey("bank_accounts.id"), nullable=False
+    )
+    file_hash: Mapped[str] = mapped_column(
+        String, unique=True, index=True, nullable=False
+    )
+    message_id: Mapped[str] = mapped_column(String, nullable=False)
+    legal_sequence_number: Mapped[Optional[str]] = mapped_column(String)
+    statement_date: Mapped[date] = mapped_column(Date, nullable=False)
+    import_timestamp: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow
+    )
+    imported_by: Mapped[Optional[str]] = mapped_column(String)
+    format: Mapped[Optional[str]] = mapped_column(String)  # camt053 | mt940
 
-    status: Column[str] = Column(
+    status: Mapped[str] = mapped_column(
         Enum("pending", "processed", "failed", name="ingest_status_enum"),
         default="pending",
     )
@@ -98,12 +121,15 @@ class StatementGap(Base):
 
     __tablename__ = "statement_gaps"
 
-    # FIX: Added default UUID
-    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
-    account_id = Column(String, ForeignKey("bank_accounts.id"), nullable=False)
-    expected_date = Column(Date, nullable=False)
-    detected_at = Column(DateTime, default=datetime.utcnow)
-    resolved_at = Column(DateTime, nullable=True)
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, index=True, default=lambda: str(uuid.uuid4())
+    )
+    account_id: Mapped[str] = mapped_column(
+        String, ForeignKey("bank_accounts.id"), nullable=False
+    )
+    expected_date: Mapped[date] = mapped_column(Date, nullable=False)
+    detected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class PeriodLock(Base):
@@ -114,11 +140,12 @@ class PeriodLock(Base):
 
     __tablename__ = "period_locks"
 
-    # FIX: Added default UUID
-    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
-    locked_until = Column(Date, nullable=False)
-    locked_by = Column(String)
-    locked_at = Column(DateTime, default=datetime.utcnow)
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, index=True, default=lambda: str(uuid.uuid4())
+    )
+    locked_until: Mapped[date] = mapped_column(Date, nullable=False)
+    locked_by: Mapped[Optional[str]] = mapped_column(String)
+    locked_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class PendingPeriodAdjustment(Base):
@@ -129,13 +156,22 @@ class PendingPeriodAdjustment(Base):
 
     __tablename__ = "pending_period_adjustments"
 
-    # FIX: Added default UUID
-    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
-    transaction_id = Column(String, ForeignKey("transactions.id"))
-    account_id = Column(String, ForeignKey("bank_accounts.id"))
-    value_date = Column(Date, nullable=False)  # The locked date
-    entry_date = Column(Date, nullable=False)  # When we received it
-    amount = Column(Numeric(18, 2), nullable=False)
-    currency = Column(String(3), nullable=False)
-    reason = Column(String)
-    status = Column(String, default="pending")  # pending | applied
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, index=True, default=lambda: str(uuid.uuid4())
+    )
+    transaction_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("transactions.id")
+    )
+    account_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("bank_accounts.id")
+    )
+    value_date: Mapped[date] = mapped_column(Date, nullable=False)  # The locked date
+    entry_date: Mapped[date] = mapped_column(
+        Date, nullable=False
+    )  # When we received it
+    amount: Mapped[Numeric] = mapped_column(Numeric(18, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    reason: Mapped[Optional[str]] = mapped_column(String)
+    status: Mapped[Optional[str]] = mapped_column(
+        String, default="pending"
+    )  # pending | applied

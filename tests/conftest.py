@@ -49,7 +49,8 @@ from app.models.transactions import (  # noqa: E402
 def _make_engine():
     engine = create_engine(
         "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
+        # FIX: Add "timeout": 30 here to prevent concurrency errors in tests
+        connect_args={"check_same_thread": False, "timeout": 30},
         poolclass=StaticPool,
     )
 
