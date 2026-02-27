@@ -5,10 +5,11 @@ NexusTreasury — Phase 2 Models: Cash Flow Forecasting
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from decimal import Decimal
+from datetime import date, datetime
+from typing import Optional
 
 from sqlalchemy import (
-    Column,
     Date,
     DateTime,
     Enum,
@@ -16,6 +17,7 @@ from sqlalchemy import (
     Numeric,
     String,
 )
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
 
@@ -27,39 +29,31 @@ class ForecastEntry(Base):
 
     __tablename__ = "forecast_entries"
 
-    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    id: Mapped[str] = mapped_column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
 
-    account_id = Column(
+    account_id: Mapped[str] = mapped_column(
         String, ForeignKey("bank_accounts.id"), nullable=False, index=True
     )
 
     # Primary amount column used by LiquidityForecastingService.ingest_forecast().
-    # The service sets `forecast_amount` — this is the canonical field.
-    forecast_amount = Column(Numeric(18, 2), nullable=False)
+    forecast_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
 
-    # FIX: `amount` was a second nullable=False column that the service never
-    # populates, causing "NOT NULL constraint failed: forecast_entries.amount"
-    # on every ingest_forecast() call.  Made nullable — callers that need a
-    # legacy `amount` alias can still set it, but leaving it NULL is fine.
-    amount = Column(Numeric(18, 2), nullable=True)
+    amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
 
-    entity_id = Column(String, ForeignKey("entities.id"), nullable=True)
+    entity_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("entities.id"), nullable=True)
 
-    expected_date = Column(Date, nullable=False, index=True)
+    expected_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
 
-    # FIX: `direction` was nullable=False with no default, but ingest_forecast()
-    # never sets it.  Gave it a sensible default so inserts succeed without
-    # callers being required to specify directionality.
-    direction = Column(String(10), nullable=True, default="INFLOW")  # INFLOW | OUTFLOW
+    direction: Mapped[Optional[str]] = mapped_column(String(10), nullable=True, default="INFLOW")  # INFLOW | OUTFLOW
 
-    currency = Column(String(3), nullable=False)
-    category = Column(String)
-    description = Column(String)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    category: Mapped[Optional[str]] = mapped_column(String)
+    description: Mapped[Optional[str]] = mapped_column(String)
 
-    source_system = Column(String, default="MANUAL")
-    probability = Column(Numeric(5, 2), default=100)
+    source_system: Mapped[Optional[str]] = mapped_column(String, default="MANUAL")
+    probability: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), default=100)
 
-    reconciliation_status: Column[str] = Column(
+    reconciliation_status: Mapped[str] = mapped_column(
         Enum(
             "projected",
             "reconciled",
@@ -70,16 +64,14 @@ class ForecastEntry(Base):
             "PARTIALLY_MATCHED",
             name="forecast_status_enum",
         ),
-        default="PENDING",  # FIX: was "projected" — service filters on "PENDING"
-        # in reconcile_actuals(); rows defaulting to "projected"
-        # would never be picked up for reconciliation.
+        default="PENDING",
     )
 
-    matched_transaction_id = Column(String, nullable=True)
-    original_expected_date = Column(Date, nullable=True)
+    matched_transaction_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    original_expected_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class VarianceAlert(Base):
@@ -89,17 +81,17 @@ class VarianceAlert(Base):
 
     __tablename__ = "variance_alerts"
 
-    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
-    alert_type = Column(String, nullable=False)
+    id: Mapped[str] = mapped_column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    alert_type: Mapped[str] = mapped_column(String, nullable=False)
 
-    account_id = Column(String, index=True)
-    forecast_id = Column(String, ForeignKey("forecast_entries.id"), nullable=True)
-    transaction_id = Column(String, nullable=True)
+    account_id: Mapped[Optional[str]] = mapped_column(String, index=True)
+    forecast_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("forecast_entries.id"), nullable=True)
+    transaction_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
-    forecast_amount = Column(Numeric(18, 2))
-    actual_amount = Column(Numeric(18, 2))
-    variance_pct = Column(Numeric(10, 2))
-    currency = Column(String(3))
+    forecast_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2))
+    actual_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2))
+    variance_pct: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2))
+    currency: Mapped[Optional[str]] = mapped_column(String(3))
 
-    notes = Column(String)
-    triggered_at = Column(DateTime, default=datetime.utcnow)
+    notes: Mapped[Optional[str]] = mapped_column(String)
+    triggered_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
