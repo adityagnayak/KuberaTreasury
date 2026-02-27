@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from functools import lru_cache
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -29,8 +29,8 @@ class Settings(BaseSettings):
 
     # ── Encryption / Auth ─────────────────────────────────────────────────────
     # AES_KEY must be 32 bytes, base64-encoded
-    AES_KEY: str = "7qHjN6QM/J1+ERyZClw84rdmVPeJlIZmjBTd34j3uV4="
-    JWT_SECRET: str = "8e3800cfd736f227674efd7aaec087cf16074d8d3d773c595192fef9e0e7143f"
+    AES_KEY: str = "CHANGE_ME_32_BYTE_BASE64_KEY_HERE="
+    JWT_SECRET: str = "CHANGE_ME_JWT_SECRET_256_BIT"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRY_MINUTES: int = 60
 
@@ -40,9 +40,10 @@ class Settings(BaseSettings):
     VARIANCE_ALERT_THRESHOLD: float = 500.0  # percent
 
     # ── Application Settings ──────────────────────────────────────────────────
-    ENVIRONMENT: Literal[
-        "development", "production", "staging", "testing"
-    ] = "development"  # development | staging | production
+    # FIX: Added "testing" to the Literal type definition
+    ENVIRONMENT: Literal["development", "staging", "production", "testing"] = (
+        "development"
+    )
     APP_TITLE: str = "NexusTreasury"
     APP_VERSION: str = "1.0.0"
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
@@ -53,7 +54,8 @@ class Settings(BaseSettings):
     @field_validator("ENVIRONMENT")
     @classmethod
     def validate_environment(cls, v: str) -> str:
-        allowed = {"development", "staging", "production"}
+        # FIX: Added "testing" to the allowed set
+        allowed = {"development", "staging", "production", "testing"}
         if v not in allowed:
             raise ValueError(f"ENVIRONMENT must be one of {allowed}")
         return v
