@@ -13,7 +13,9 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, getcontext
-from typing import List, Optional
+
+# FIX: Added 'cast' to imports
+from typing import List, Optional, cast
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
@@ -250,28 +252,38 @@ class SanctionsScreeningService:
     def screen(self, session: Session, payment: Payment) -> Optional[dict]:
         # 1. Exact BIC match
         for entry in self.ofac_list:
-            if payment.beneficiary_bic.upper() == entry["bic"].upper():
+            if str(payment.beneficiary_bic).upper() == entry["bic"].upper():
                 return self._record_hit(
-                    session, payment, "bic", payment.beneficiary_bic, entry, 1.0
+                    session, payment, "bic", str(payment.beneficiary_bic), entry, 1.0
                 )
 
         # 2. Exact country match
         for entry in self.ofac_list:
-            if payment.beneficiary_country.upper() == entry["country"].upper():
+            if str(payment.beneficiary_country).upper() == entry["country"].upper():
                 return self._record_hit(
-                    session, payment, "country", payment.beneficiary_country, entry, 1.0
+                    session,
+                    payment,
+                    "country",
+                    str(payment.beneficiary_country),
+                    entry,
+                    1.0,
                 )
 
         # 3. Fuzzy name match
         for entry in self.ofac_list:
             score = difflib.SequenceMatcher(
                 None,
-                payment.beneficiary_name.upper(),
+                str(payment.beneficiary_name).upper(),
                 entry["name"].upper(),
             ).ratio()
             if score >= self.threshold:
                 return self._record_hit(
-                    session, payment, "name", payment.beneficiary_name, entry, score
+                    session,
+                    payment,
+                    "name",
+                    str(payment.beneficiary_name),
+                    entry,
+                    score,
                 )
 
         return None
@@ -289,7 +301,7 @@ class SanctionsScreeningService:
         payment.updated_at = datetime.utcnow()
 
         alert = SanctionsAlert(
-            payment_id=payment.id,
+            payment_id=str(payment.id),
             matched_field=matched_field,
             matched_value=matched_value,
             list_entry_name=entry["name"],
@@ -300,7 +312,7 @@ class SanctionsScreeningService:
         session.flush()
 
         return {
-            "payment_id": payment.id,
+            "payment_id": str(payment.id),
             "matched_field": matched_field,
             "matched_value": matched_value,
             "list_entry_name": entry["name"],
@@ -338,12 +350,12 @@ class PAIN001Validator:
             ("beneficiary_iban", payment.beneficiary_iban),
         ]:
             if iban_val:
-                err = validate_iban_field(iban_val)
+                err = validate_iban_field(str(iban_val))
                 if err:
                     errors.append({"field": fname, "error": err})
 
         if payment.beneficiary_bic:
-            err = validate_bic_field(payment.beneficiary_bic)
+            err = validate_bic_field(str(payment.beneficiary_bic))
             if err:
                 errors.append({"field": "beneficiary_bic", "error": err})
 
@@ -361,7 +373,7 @@ class PAIN001Validator:
 
         if payment.execution_date:
             try:
-                datetime.strptime(payment.execution_date, "%Y-%m-%d")
+                datetime.strptime(str(payment.execution_date), "%Y-%m-%d")
             except ValueError:
                 errors.append(
                     {"field": "execution_date", "error": "Must be YYYY-MM-DD format"}
@@ -382,7 +394,7 @@ def build_pain001_xml(payment: Payment) -> bytes:
     cstmr = etree.SubElement(doc, "CstmrCdtTrfInitn")
 
     grp_hdr = etree.SubElement(cstmr, "GrpHdr")
-    etree.SubElement(grp_hdr, "MsgId").text = f"NEXUS-{payment.id[:8].upper()}"
+    etree.SubElement(grp_hdr, "MsgId").text = f"NEXUS-{str(payment.id)[:8].upper()}"
     etree.SubElement(grp_hdr, "CreDtTm").text = datetime.utcnow().strftime(
         "%Y-%m-%dT%H:%M:%S"
     )
@@ -394,7 +406,7 @@ def build_pain001_xml(payment: Payment) -> bytes:
     etree.SubElement(initg_pty, "Nm").text = "NexusTreasury"
 
     pmt_inf = etree.SubElement(cstmr, "PmtInf")
-    etree.SubElement(pmt_inf, "PmtInfId").text = f"PMTINF-{payment.id[:8].upper()}"
+    etree.SubElement(pmt_inf, "PmtInfId").text = f"PMTINF-{str(payment.id)[:8].upper()}"
     etree.SubElement(pmt_inf, "PmtMtd").text = "TRF"
     etree.SubElement(pmt_inf, "NbOfTxs").text = "1"
     etree.SubElement(pmt_inf, "CtrlSum").text = str(
@@ -405,13 +417,13 @@ def build_pain001_xml(payment: Payment) -> bytes:
     svc_lvl = etree.SubElement(pmt_tp, "SvcLvl")
     etree.SubElement(svc_lvl, "Cd").text = "SEPA"
 
-    etree.SubElement(pmt_inf, "ReqdExctnDt").text = payment.execution_date
+    etree.SubElement(pmt_inf, "ReqdExctnDt").text = str(payment.execution_date)
 
     dbtr = etree.SubElement(pmt_inf, "Dbtr")
     etree.SubElement(dbtr, "Nm").text = "NexusTreasury Debtor"
     dbtr_acct = etree.SubElement(pmt_inf, "DbtrAcct")
     dbtr_acct_id = etree.SubElement(dbtr_acct, "Id")
-    etree.SubElement(dbtr_acct_id, "IBAN").text = payment.debtor_iban
+    etree.SubElement(dbtr_acct_id, "IBAN").text = str(payment.debtor_iban)
 
     dbtr_agt = etree.SubElement(pmt_inf, "DbtrAgt")
     fin_instn = etree.SubElement(dbtr_agt, "FinInstnId")
@@ -419,26 +431,26 @@ def build_pain001_xml(payment: Payment) -> bytes:
 
     cdt_trf = etree.SubElement(pmt_inf, "CdtTrfTxInf")
     pmt_id = etree.SubElement(cdt_trf, "PmtId")
-    etree.SubElement(pmt_id, "EndToEndId").text = payment.end_to_end_id
+    etree.SubElement(pmt_id, "EndToEndId").text = str(payment.end_to_end_id)
 
     amt = etree.SubElement(cdt_trf, "Amt")
-    instd_amt = etree.SubElement(amt, "InstdAmt", Ccy=payment.currency)
+    instd_amt = etree.SubElement(amt, "InstdAmt", Ccy=str(payment.currency))
     instd_amt.text = str(Decimal(str(payment.amount)).quantize(Decimal("0.01")))
 
     cdtr_agt = etree.SubElement(cdt_trf, "CdtrAgt")
     cdtr_fin = etree.SubElement(cdtr_agt, "FinInstnId")
-    etree.SubElement(cdtr_fin, "BICFI").text = payment.beneficiary_bic
+    etree.SubElement(cdtr_fin, "BICFI").text = str(payment.beneficiary_bic)
 
     cdtr = etree.SubElement(cdt_trf, "Cdtr")
-    etree.SubElement(cdtr, "Nm").text = payment.beneficiary_name
+    etree.SubElement(cdtr, "Nm").text = str(payment.beneficiary_name)
 
     cdtr_acct = etree.SubElement(cdt_trf, "CdtrAcct")
     cdtr_acct_id = etree.SubElement(cdtr_acct, "Id")
-    etree.SubElement(cdtr_acct_id, "IBAN").text = payment.beneficiary_iban
+    etree.SubElement(cdtr_acct_id, "IBAN").text = str(payment.beneficiary_iban)
 
     if payment.remittance_info:
         rmt_inf = etree.SubElement(cdt_trf, "RmtInf")
-        etree.SubElement(rmt_inf, "Ustrd").text = payment.remittance_info
+        etree.SubElement(rmt_inf, "Ustrd").text = str(payment.remittance_info)
 
     return etree.tostring(
         doc, xml_declaration=True, encoding="UTF-8", pretty_print=True
@@ -466,7 +478,6 @@ class PaymentService:
             (payment_req.debtor_iban, "debtor_iban"),
             (payment_req.beneficiary_iban, "beneficiary_iban"),
         ]:
-            # FIX: Removed unused 'err :=' assignment. validate_iban_field returns truthy string on error.
             if validate_iban_field(iban):
                 raise InvalidIBANError(iban)
 
@@ -521,7 +532,7 @@ class PaymentService:
         # 3. Immediate Sanctions Screening
         hit = self.sanctions.screen(self.session, payment)
         if hit:
-            self._audit(payment.id, "SYSTEM", "SANCTIONS_HIT", str(hit))
+            self._audit(str(payment.id), "SYSTEM", "SANCTIONS_HIT", str(hit))
             self.session.commit()
             raise SanctionsHitError(
                 payment_id=hit["payment_id"],
@@ -536,7 +547,7 @@ class PaymentService:
         self.session.flush()
         payment.status = advance_state("DRAFT", "PENDING_APPROVAL")
         payment.updated_at = datetime.utcnow()
-        self._audit(payment.id, maker_user_id, "PAYMENT_INITIATED")
+        self._audit(str(payment.id), maker_user_id, "PAYMENT_INITIATED")
         self.session.commit()
         return payment
 
@@ -554,8 +565,8 @@ class PaymentService:
             self.session.commit()
             raise SelfApprovalError(checker_user_id)
 
-        if payment.status != "PENDING_APPROVAL":
-            raise InvalidStateTransitionError(payment.status, "APPROVED")
+        if str(payment.status) != "PENDING_APPROVAL":
+            raise InvalidStateTransitionError(str(payment.status), "APPROVED")
 
         approval_ts = datetime.utcnow()
         sig_bytes = sign_approval(
@@ -606,7 +617,7 @@ class PaymentService:
         return ApprovalResult(
             payment_id=payment_id,
             checker_user_id=checker_user_id,
-            status=payment.status,
+            status=str(payment.status),
             signature_fingerprint=fingerprint,
             approved_at=approval_ts,
         )
@@ -614,8 +625,8 @@ class PaymentService:
     def validate_and_export(self, payment_id: str) -> PAIN001Result:
         payment = self._get_payment(payment_id)
 
-        if payment.status != "FUNDS_CHECKED":
-            raise InvalidStateTransitionError(payment.status, "VALIDATED")
+        if str(payment.status) != "FUNDS_CHECKED":
+            raise InvalidStateTransitionError(str(payment.status), "VALIDATED")
 
         if not payment.approval_signature or not payment.approval_public_key_pem:
             raise InvalidSignatureError(payment_id)
@@ -623,9 +634,9 @@ class PaymentService:
         verify_approval_signature(
             payment_id,
             Decimal(str(payment.amount)),
-            payment.approval_timestamp,
-            payment.approval_signature,
-            payment.approval_public_key_pem,
+            cast(datetime, payment.approval_timestamp),
+            str(payment.approval_signature),
+            str(payment.approval_public_key_pem),
         )
 
         account = (
@@ -680,8 +691,8 @@ class PaymentService:
         return PAIN001Result(
             payment_id=payment_id,
             xml_bytes=xml_bytes,
-            end_to_end_id=payment.end_to_end_id,
-            status=payment.status,
+            end_to_end_id=str(payment.end_to_end_id),
+            status=str(payment.status),
         )
 
     def _get_payment(self, payment_id: str) -> Payment:

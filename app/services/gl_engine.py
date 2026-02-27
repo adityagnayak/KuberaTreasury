@@ -98,6 +98,14 @@ class GLMappingEngine:
     def _assert_balanced(self, lines: List[JournalLine]) -> None:
         total_debit = sum(line.debit for line in lines)
         total_credit = sum(line.credit for line in lines)
+
+        # FIX: Ensure we compare Decimals, not 0 (int)
+        # sum() start defaults to int 0, so if list is empty or sum is 0, type is 0 | Decimal
+        if not isinstance(total_debit, Decimal):
+            total_debit = Decimal(total_debit)
+        if not isinstance(total_credit, Decimal):
+            total_credit = Decimal(total_credit)
+
         if total_debit != total_credit:
             raise UnbalancedJournalError(total_debit, total_credit)
 

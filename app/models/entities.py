@@ -1,24 +1,20 @@
 """
-NexusTreasury — ORM Models: Entities & Bank Accounts (Phase 1)
+NexusTreasury — Phase 1 & 2 Models: Entities, Accounts, Ingestion Registry
 """
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime
-from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
-    CheckConstraint,
     Column,
+    Date,
     DateTime,
     Enum,
     ForeignKey,
     Numeric,
     String,
-    UniqueConstraint,
-    Date,
 )
 from sqlalchemy.orm import relationship
 
@@ -26,141 +22,115 @@ from app.database import Base
 
 
 class Entity(Base):
-    """Legal entities (Parent/Subsidiary)."""
-
     __tablename__ = "entities"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String(255), nullable=False)
-    entity_type = Column(
-        Enum("parent", "subsidiary", name="entity_type_enum"),
+    id = Column(String, primary_key=True, index=True)  # UUID
+    name = Column(String, nullable=False)
+    # FIX: Added type annotation
+    entity_type: Column[str] = Column(
+        Enum("parent", "subsidiary", "spv", name="entity_type_enum"),
         nullable=False,
+        default="subsidiary",
     )
-    base_currency = Column(String(3), nullable=False)
-    is_active = Column(Boolean, nullable=False, default=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    country_code = Column(String(2))
+    base_currency = Column(String(3), nullable=False, default="EUR")
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
-    __table_args__ = (
-        CheckConstraint("length(base_currency) = 3", name="ck_entities_currency_len"),
-    )
-
-    bank_accounts = relationship("BankAccount", back_populates="entity")
-    kyc_documents = relationship("KYCDocument", back_populates="entity")
+    accounts = relationship("BankAccount", back_populates="entity")
 
 
 class BankAccount(Base):
-    """Bank accounts with IBAN validation, BIC, overdraft limit."""
-
     __tablename__ = "bank_accounts"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    entity_id = Column(String(36), ForeignKey("entities.id"), nullable=False)
-    iban = Column(String(34), nullable=False, unique=True)
-    bic = Column(String(11), nullable=False)
-    account_name = Column(String(255), nullable=True)
+    id = Column(String, primary_key=True, index=True)  # UUID
+    entity_id = Column(String, ForeignKey("entities.id"), nullable=False)
+    account_number = Column(String)
+    iban = Column(String, unique=True, index=True, nullable=False)
+    bic = Column(String, nullable=False)
+    account_name = Column(String)
     currency = Column(String(3), nullable=False)
-    overdraft_limit = Column(
-        Numeric(precision=28, scale=8), nullable=False, default=Decimal("0")
-    )
-    account_status = Column(
-        Enum("active", "frozen", "expired_mandate", name="account_status_enum"),
-        nullable=False,
+    bank_name = Column(String)
+    country_code = Column(String(2))
+
+    # FIX: Added type annotation
+    account_status: Column[str] = Column(
+        Enum("active", "closed", "blocked", name="account_status_enum"),
         default="active",
+        nullable=False,
     )
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    overdraft_limit = Column(Numeric(18, 2), default=0)
 
-    __table_args__ = (
-        CheckConstraint(
-            "length(bic) BETWEEN 8 AND 11", name="ck_bank_accounts_bic_len"
-        ),
-        CheckConstraint(
-            "overdraft_limit >= 0", name="ck_bank_accounts_overdraft_positive"
-        ),
-        CheckConstraint("length(currency) = 3", name="ck_bank_accounts_currency_len"),
-    )
-
-    entity = relationship("Entity", back_populates="bank_accounts")
+    entity = relationship("Entity", back_populates="accounts")
     transactions = relationship("Transaction", back_populates="account")
     cash_positions = relationship("CashPosition", back_populates="account")
-    statement_gaps = relationship("StatementGap", back_populates="account")
-    payments = relationship("Payment", back_populates="debtor_account")
-    mandates = relationship("Mandate", back_populates="account")
 
 
 class StatementRegistry(Base):
-    """Tracks every imported bank statement file."""
+    """
+    Tracks ingested statements (CAMT.053 / MT940) to prevent duplicates.
+    Immutable log.
+    """
 
     __tablename__ = "statement_registry"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    account_id = Column(String(36), ForeignKey("bank_accounts.id"), nullable=False)
-    file_hash = Column(String(64), nullable=False)
-    message_id = Column(String(255), nullable=False)
-    legal_sequence_number = Column(String(50), nullable=True)
-    statement_date = Column(Date, nullable=True)
-    import_timestamp = Column(DateTime, nullable=False, default=datetime.utcnow)
-    status = Column(
-        Enum(
-            "pending",
-            "processed",
-            "failed",
-            "duplicate",
-            name="stmt_status_enum",
-        ),
-        nullable=False,
-        default="pending",
-    )
-    imported_by = Column(String(255), nullable=True)
-    format = Column(String(20), nullable=True)  # 'camt053' | 'mt940'
+    id = Column(String, primary_key=True, index=True)
+    account_id = Column(String, ForeignKey("bank_accounts.id"), nullable=False)
+    file_hash = Column(String, unique=True, index=True, nullable=False)
+    message_id = Column(String, nullable=False)
+    legal_sequence_number = Column(String)
+    statement_date = Column(Date, nullable=False)
+    import_timestamp = Column(DateTime, default=datetime.utcnow)
+    imported_by = Column(String)
+    format = Column(String)  # camt053 | mt940
 
-    __table_args__ = (
-        UniqueConstraint(
-            "message_id",
-            "legal_sequence_number",
-            name="uq_statement_message_seq",
-        ),
+    # FIX: Added type annotation
+    status: Column[str] = Column(
+        Enum("pending", "processed", "failed", name="ingest_status_enum"),
+        default="pending",
     )
 
 
 class StatementGap(Base):
-    """Records detected missing bank statement dates per account."""
+    """Tracks missing statement dates."""
 
     __tablename__ = "statement_gaps"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    account_id = Column(String(36), ForeignKey("bank_accounts.id"), nullable=False)
+    id = Column(String, primary_key=True, index=True)
+    account_id = Column(String, ForeignKey("bank_accounts.id"), nullable=False)
     expected_date = Column(Date, nullable=False)
-    detected_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    resolved = Column(Boolean, nullable=False, default=False)
+    detected_at = Column(DateTime, default=datetime.utcnow)
     resolved_at = Column(DateTime, nullable=True)
-
-    account = relationship("BankAccount", back_populates="statement_gaps")
 
 
 class PeriodLock(Base):
-    """Accounting period locks."""
+    """
+    Prevents modifications to transactions/balances before a certain date.
+    Used for month-end closing.
+    """
 
     __tablename__ = "period_locks"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(String, primary_key=True, index=True)
     locked_until = Column(Date, nullable=False)
-    locked_by = Column(String(255), nullable=True)
-    locked_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    note = Column(String(500), nullable=True)
+    locked_by = Column(String)
+    locked_at = Column(DateTime, default=datetime.utcnow)
 
 
 class PendingPeriodAdjustment(Base):
-    """Transactions blocked by period lock, awaiting manual review."""
+    """
+    When a statement arrives for a LOCKED period, we store the delta here
+    instead of modifying the closed period's balance.
+    """
 
     __tablename__ = "pending_period_adjustments"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    transaction_id = Column(String(36), nullable=False)
-    account_id = Column(String(36), nullable=False)
-    value_date = Column(Date, nullable=False)
-    entry_date = Column(Date, nullable=False)
-    amount = Column(Numeric(precision=28, scale=8), nullable=False)
+    id = Column(String, primary_key=True, index=True)
+    transaction_id = Column(String, ForeignKey("transactions.id"))
+    account_id = Column(String, ForeignKey("bank_accounts.id"))
+    value_date = Column(Date, nullable=False)  # The locked date
+    entry_date = Column(Date, nullable=False)  # When we received it
+    amount = Column(Numeric(18, 2), nullable=False)
     currency = Column(String(3), nullable=False)
-    reason = Column(String(500), nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    reviewed = Column(Boolean, nullable=False, default=False)
+    reason = Column(String)
+    status = Column(String, default="pending")  # pending | applied
