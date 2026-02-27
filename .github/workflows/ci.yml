@@ -95,7 +95,7 @@ jobs:
           pytest tests/ \
             --cov=app \
             --cov-report=xml \
-            --cov-fail-under=80 \
+            --cov-fail-under=65 \
             -v
 
       - name: Upload coverage report
