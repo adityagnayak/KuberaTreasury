@@ -58,8 +58,20 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
+      # FIX: Install type stubs before running mypy.
+      # sqlalchemy2-stubs  — resolves all Column[T] vs T false positives (~90 errors).
+      # types-python-dateutil — resolves the dateutil import-untyped error in ingestion.py.
+      - name: Install type stubs
+        run: |
+          pip install sqlalchemy2-stubs types-python-dateutil
+
+      # FIX: Remove --ignore-missing-imports from the command line.
+      # mypy.ini (added to repo root) now owns all mypy config including
+      # ignore_missing_imports = True and the SQLAlchemy plugin declaration.
+      # Passing --ignore-missing-imports here would override the ini file
+      # and prevent the plugin from activating.
       - name: Mypy
-        run: mypy app/ --ignore-missing-imports
+        run: mypy app/
 
   test:
     name: Test
@@ -95,6 +107,7 @@ jobs:
           pytest tests/ \
             --cov=app \
             --cov-report=xml \
+            --cov-report=term-missing \
             --cov-fail-under=65 \
             -v
 
