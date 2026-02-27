@@ -40,9 +40,9 @@ class Settings(BaseSettings):
     VARIANCE_ALERT_THRESHOLD: float = 500.0  # percent
 
     # ── Application Settings ──────────────────────────────────────────────────
-    ENVIRONMENT: Literal["development", "production", "staging", "testing"] = (
-        "development"  # development | staging | production
-    )
+    ENVIRONMENT: Literal[
+        "development", "production", "staging", "testing"
+    ] = "development"  # development | staging | production
     APP_TITLE: str = "NexusTreasury"
     APP_VERSION: str = "1.0.0"
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
