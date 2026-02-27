@@ -9,7 +9,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import List, Optional
+from typing import List, Optional, cast
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
@@ -116,25 +116,42 @@ class EBAMService:
         active = [
             m
             for m in all_mandates
-            if m.status == "active" and m.valid_from <= today <= m.valid_until
+            if m.status == "active" and m.valid_from <= today
+            # FIX: Ensure valid_until is not None before comparing
+            and (m.valid_until is None or today <= m.valid_until)
         ]
+
         if not active:
-            expired = sorted(all_mandates, key=lambda m: m.valid_until, reverse=True)[0]
-            acct = self.session.query(BankAccount).filter_by(id=account_id).first()
-            if acct:
-                acct.account_status = "expired_mandate"
-            self._log(
-                account_id,
-                "SYSTEM",
-                "EXPIRED_MANDATE_BLOCKED",
-                f"expired_on={expired.valid_until.isoformat()}",
-            )
-            self.session.commit()
-            raise ExpiredMandateError(account_id, expired.valid_until)
+            # FIX: Find the latest expired mandate (ignoring those with no expiry date)
+            expired_candidates = [m for m in all_mandates if m.valid_until is not None]
+
+            if expired_candidates:
+                expired = sorted(
+                    expired_candidates, key=lambda m: m.valid_until, reverse=True
+                )[0]
+                acct = self.session.query(BankAccount).filter_by(id=account_id).first()
+                if acct:
+                    acct.account_status = "expired_mandate"
+
+                # We know valid_until is not None due to the list comprehension, but mypy doesn't.
+                expiry_dt = cast(date, expired.valid_until)
+
+                self._log(
+                    account_id,
+                    "SYSTEM",
+                    "EXPIRED_MANDATE_BLOCKED",
+                    f"expired_on={expiry_dt.isoformat()}",
+                )
+                self.session.commit()
+                raise ExpiredMandateError(account_id, expiry_dt)
+            else:
+                # No active mandates, and no expired mandates with dates -> No valid mandate logic
+                raise NoMandateError(account_id)
 
         if checker_public_key_pem:
             match = any(
-                m.public_key_pem.strip() == checker_public_key_pem.strip()
+                # FIX: Handle None public_key_pem
+                (m.public_key_pem or "").strip() == checker_public_key_pem.strip()
                 for m in active
             )
             if not match:
@@ -180,16 +197,18 @@ class EBAMService:
             .all()
         )
         for m in mandates:
-            alerts.append(
-                ExpirationAlert(
-                    item_type="mandate",
-                    item_id=m.id,
-                    owner_id=m.account_id,
-                    expires_on=m.valid_until,
-                    days_remaining=(m.valid_until - today).days,
-                    detail=f"Signatory: {m.signatory_name}",
+            # FIX: Ensure valid_until is present before adding alert
+            if m.valid_until:
+                alerts.append(
+                    ExpirationAlert(
+                        item_type="mandate",
+                        item_id=m.id,
+                        owner_id=m.account_id,
+                        expires_on=m.valid_until,
+                        days_remaining=(m.valid_until - today).days,
+                        detail=f"Signatory: {m.signatory_name}",
+                    )
                 )
-            )
 
         # KYC documents
         kyc_docs = (
@@ -202,16 +221,18 @@ class EBAMService:
             .all()
         )
         for d in kyc_docs:
-            alerts.append(
-                ExpirationAlert(
-                    item_type="kyc_document",
-                    item_id=d.id,
-                    owner_id=d.entity_id,
-                    expires_on=d.expiry_date,
-                    days_remaining=(d.expiry_date - today).days,
-                    detail=f"Doc type: {d.doc_type}",
+            # FIX: Ensure required nullable fields are present
+            if d.expiry_date and d.entity_id:
+                alerts.append(
+                    ExpirationAlert(
+                        item_type="kyc_document",
+                        item_id=d.id,
+                        owner_id=d.entity_id,
+                        expires_on=d.expiry_date,
+                        days_remaining=(d.expiry_date - today).days,
+                        detail=f"Doc type: {d.doc_type}",
+                    )
                 )
-            )
 
         return alerts
 

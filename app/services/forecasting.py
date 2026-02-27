@@ -249,7 +249,8 @@ class LiquidityForecastingService:
         return AlertDTO(
             alert_id=alert_row.id,
             alert_type=alert_row.alert_type,
-            account_id=alert_row.account_id,
+            # FIX: Use fc.account_id which is guaranteed non-null string
+            account_id=fc.account_id,
             forecast_amount=forecast_amt,
             actual_amount=actual_amt,
             variance_pct=variance_pct,
@@ -315,16 +316,19 @@ class LiquidityForecastingService:
                     AlertDTO(
                         alert_id=a.id,
                         alert_type=a.alert_type,
-                        account_id=a.account_id,
-                        forecast_amount=Decimal(str(a.forecast_amount))
-                        if a.forecast_amount
-                        else None,
-                        actual_amount=Decimal(str(a.actual_amount))
-                        if a.actual_amount
-                        else None,
-                        variance_pct=Decimal(str(a.variance_pct))
-                        if a.variance_pct
-                        else None,
+                        # FIX: Handle potential nullable account_id (fallback to "")
+                        account_id=a.account_id or "",
+                        forecast_amount=(
+                            Decimal(str(a.forecast_amount))
+                            if a.forecast_amount
+                            else None
+                        ),
+                        actual_amount=(
+                            Decimal(str(a.actual_amount)) if a.actual_amount else None
+                        ),
+                        variance_pct=(
+                            Decimal(str(a.variance_pct)) if a.variance_pct else None
+                        ),
                         currency=a.currency or fc.currency,
                         triggered_at=a.triggered_at,
                     )
