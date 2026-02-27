@@ -151,8 +151,8 @@ def validate_bic_field(bic: str) -> Optional[str]:
 
 def generate_rsa_keypair() -> tuple[RSAPrivateKey, RSAPublicKey]:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    pub_key = cast(RSAPublicKey, private_key.public_key())
-    return private_key, pub_key
+    # FIX: Explicit cast ensures mypy knows this is RSAPublicKey
+    return private_key, cast(RSAPublicKey, private_key.public_key())
 
 
 def sign_approval(
@@ -606,114 +606,4 @@ class PaymentService:
             )
 
         payment.status = advance_state("SANCTIONS_REVIEW", "FUNDS_CHECKED")
-        payment.updated_at = datetime.utcnow()
-        self._audit(
-            payment_id,
-            checker_user_id,
-            "PAYMENT_APPROVED",
-            f"fingerprint={fingerprint}",
-        )
-        self.session.commit()
-
-        return ApprovalResult(
-            payment_id=payment_id,
-            checker_user_id=checker_user_id,
-            status=str(payment.status),
-            signature_fingerprint=fingerprint,
-            approved_at=approval_ts,
-        )
-
-    def validate_and_export(self, payment_id: str) -> PAIN001Result:
-        payment = self._get_payment(payment_id)
-
-        if str(payment.status) != "FUNDS_CHECKED":
-            raise InvalidStateTransitionError(str(payment.status), "VALIDATED")
-
-        if not payment.approval_signature or not payment.approval_public_key_pem:
-            raise InvalidSignatureError(payment_id)
-
-        verify_approval_signature(
-            payment_id,
-            Decimal(str(payment.amount)),
-            cast(datetime, payment.approval_timestamp),
-            str(payment.approval_signature),
-            str(payment.approval_public_key_pem),
-        )
-
-        account = (
-            self.session.query(BankAccount)
-            .filter_by(id=payment.debtor_account_id)
-            .first()
-        )
-        if account is None:
-            raise ValueError(f"Debtor account {payment.debtor_account_id} not found")
-
-        cash_pos = (
-            self.session.query(CashPosition)
-            .filter_by(account_id=account.id)
-            .order_by(CashPosition.position_date.desc())
-            .first()
-        )
-        current_balance = (
-            Decimal(str(cash_pos.value_date_balance)) if cash_pos else Decimal("0")
-        )
-        overdraft_limit = Decimal(str(account.overdraft_limit))
-        available_funds = current_balance + overdraft_limit
-        requested = Decimal(str(payment.amount))
-
-        if requested > available_funds:
-            payment.status = "INSUFFICIENT_FUNDS"
-            payment.updated_at = datetime.utcnow()
-            self._audit(payment_id, "SYSTEM", "INSUFFICIENT_FUNDS")
-            self.session.commit()
-            raise InsufficientFundsError(available=available_funds, requested=requested)
-
-        errors = self.validator.validate(payment)
-        if errors:
-            payment.status = "FAILED_VALIDATION"
-            payment.updated_at = datetime.utcnow()
-            self._audit(payment_id, "SYSTEM", "VALIDATION_FAILED", str(errors))
-            self.session.commit()
-            raise PaymentValidationError(errors)
-
-        payment.status = advance_state("FUNDS_CHECKED", "VALIDATED")
-        payment.updated_at = datetime.utcnow()
-
-        xml_bytes = build_pain001_xml(payment)
-        payment.pain001_xml = xml_bytes.decode("utf-8")
-        payment.status = advance_state("VALIDATED", "EXPORTED")
-        payment.updated_at = datetime.utcnow()
-
-        self._audit(
-            payment_id, "SYSTEM", "PAIN001_EXPORTED", f"e2e_id={payment.end_to_end_id}"
-        )
-        self.session.commit()
-
-        return PAIN001Result(
-            payment_id=payment_id,
-            xml_bytes=xml_bytes,
-            end_to_end_id=str(payment.end_to_end_id),
-            status=str(payment.status),
-        )
-
-    def _get_payment(self, payment_id: str) -> Payment:
-        p = self.session.query(Payment).filter_by(id=payment_id).first()
-        if p is None:
-            raise PaymentNotFoundError(payment_id)
-        return p
-
-    def _audit(
-        self,
-        payment_id: Optional[str],
-        user_id: Optional[str],
-        action: str,
-        details: Optional[str] = None,
-    ) -> None:
-        log = PaymentAuditLog(
-            payment_id=payment_id,
-            user_id=user_id,
-            action=action,
-            details=details,
-        )
-        self.session.add(log)
-        self.session.flush()
+        payment.updated_at = 
