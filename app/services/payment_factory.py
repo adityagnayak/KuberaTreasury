@@ -149,7 +149,7 @@ def validate_bic_field(bic: str) -> Optional[str]:
 
 def generate_rsa_keypair() -> tuple[RSAPrivateKey, RSAPublicKey]:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    # FIX: Explicitly cast the abstract public key to RSAPublicKey
+    # FIX: Re-applied cast to RSAPublicKey to satisfy mypy
     return private_key, cast(RSAPublicKey, private_key.public_key())
 
 

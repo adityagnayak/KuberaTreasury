@@ -116,24 +116,26 @@ class EBAMService:
         active = [
             m
             for m in all_mandates
-            if m.status == "active" and m.valid_from <= today
-            # FIX: Ensure valid_until is not None before comparing
+            if m.status == "active"
+            and m.valid_from <= today
             and (m.valid_until is None or today <= m.valid_until)
         ]
 
         if not active:
-            # FIX: Find the latest expired mandate (ignoring those with no expiry date)
             expired_candidates = [m for m in all_mandates if m.valid_until is not None]
 
             if expired_candidates:
+                # FIX: Added default fallback for key function to satisfy mypy strict check
                 expired = sorted(
-                    expired_candidates, key=lambda m: m.valid_until, reverse=True
+                    expired_candidates,
+                    key=lambda m: m.valid_until or date(1900, 1, 1),
+                    reverse=True,
                 )[0]
+
                 acct = self.session.query(BankAccount).filter_by(id=account_id).first()
                 if acct:
                     acct.account_status = "expired_mandate"
 
-                # We know valid_until is not None due to the list comprehension, but mypy doesn't.
                 expiry_dt = cast(date, expired.valid_until)
 
                 self._log(
@@ -145,12 +147,10 @@ class EBAMService:
                 self.session.commit()
                 raise ExpiredMandateError(account_id, expiry_dt)
             else:
-                # No active mandates, and no expired mandates with dates -> No valid mandate logic
                 raise NoMandateError(account_id)
 
         if checker_public_key_pem:
             match = any(
-                # FIX: Handle None public_key_pem
                 (m.public_key_pem or "").strip() == checker_public_key_pem.strip()
                 for m in active
             )
@@ -197,7 +197,6 @@ class EBAMService:
             .all()
         )
         for m in mandates:
-            # FIX: Ensure valid_until is present before adding alert
             if m.valid_until:
                 alerts.append(
                     ExpirationAlert(
@@ -221,7 +220,6 @@ class EBAMService:
             .all()
         )
         for d in kyc_docs:
-            # FIX: Ensure required nullable fields are present
             if d.expiry_date and d.entity_id:
                 alerts.append(
                     ExpirationAlert(
