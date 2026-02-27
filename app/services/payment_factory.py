@@ -149,7 +149,7 @@ def validate_bic_field(bic: str) -> Optional[str]:
 
 def generate_rsa_keypair() -> tuple[RSAPrivateKey, RSAPublicKey]:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    # FIX: Re-applied cast to RSAPublicKey to satisfy mypy
+    # FIX 1: Explicitly cast to RSAPublicKey (already applied)
     return private_key, cast(RSAPublicKey, private_key.public_key())
 
 
@@ -170,9 +170,11 @@ def verify_approval_signature(
     signature_b64: str,
     public_key_pem: str,
 ) -> bool:
-    public_key: RSAPublicKey = serialization.load_pem_public_key(
-        public_key_pem.encode("utf-8")
+    # FIX 2: Explicitly cast loaded key to RSAPublicKey
+    public_key = cast(
+        RSAPublicKey, serialization.load_pem_public_key(public_key_pem.encode("utf-8"))
     )
+
     payload = f"{payment_id}|{amount}|{timestamp.isoformat()}".encode("utf-8")
     sig_bytes = base64.b64decode(signature_b64)
     try:
