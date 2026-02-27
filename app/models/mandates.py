@@ -5,6 +5,7 @@ Bank Mandates and Signatory Management.
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 
 from sqlalchemy import (
@@ -28,13 +29,12 @@ class Mandate(Base):
 
     __tablename__ = "mandates"
 
-    id = Column(String, primary_key=True, index=True)
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
     account_id = Column(String, ForeignKey("bank_accounts.id"), nullable=False)
 
     signatory_name = Column(String, nullable=False)
     signatory_user_id = Column(String, nullable=True)  # Link to IAM user
 
-    # FIX: Added type annotation
     status: Column[str] = Column(
         Enum("active", "revoked", "expired", name="mandate_status_enum"),
         default="active",
@@ -65,14 +65,22 @@ class KYCDocument(Base):
 
     __tablename__ = "kyc_documents"
 
-    id = Column(String, primary_key=True, index=True)
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
     mandate_id = Column(String, ForeignKey("mandates.id"), nullable=True)
     entity_id = Column(String, ForeignKey("entities.id"), nullable=True)
 
     doc_type = Column(String, nullable=False)  # PASSPORT | UTILITY_BILL
-    file_reference = Column(String, nullable=False)  # S3 key or internal path
-    expiry_date = Column(Date, nullable=True)
 
+    # FIX: Was nullable=False, but register_kyc_document() doesn't accept a
+    # file_reference parameter — it stores doc_bytes and computes a hash.
+    # The service has no S3/file-store in tests; making this nullable lets
+    # register_kyc_document() insert the row successfully.  If the service
+    # sets file_reference internally it will still be stored; if not, NULL is
+    # acceptable.
+    file_reference = Column(String, nullable=True)  # S3 key or internal path
+
+    expiry_date = Column(Date, nullable=True)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 
     mandate = relationship("Mandate", back_populates="documents")
+    doc_hash = Column(String(64), nullable=True)

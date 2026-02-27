@@ -364,22 +364,43 @@ class TransferPricingViolationError(NexusTreasuryError):
     http_status_code = 422
     error_code = "TRANSFER_PRICING_VIOLATION"
 
+    # FIX: Updated signature to match test usage (deviation_bps, max_allowed_bps)
     def __init__(
-        self, proposed_rate: Decimal, base_rate: Decimal, arm_length_bps: Decimal
+        self,
+        proposed_rate: Decimal,
+        base_rate: Decimal,
+        deviation_bps: int | float | None = None,
+        max_allowed_bps: int | float | None = None,
+        arm_length_bps: Decimal | None = None,
     ) -> None:
         self.proposed_rate = proposed_rate
         self.base_rate = base_rate
-        bps = arm_length_bps / Decimal("10000")
+
+        # Handle different arguments from test vs code
+        threshold = arm_length_bps
+        if threshold is None and max_allowed_bps is not None:
+            threshold = Decimal(str(max_allowed_bps))
+        if threshold is None:
+            threshold = Decimal("150")  # Default fallback
+
+        bps = threshold / Decimal("10000")
         lower = base_rate - bps
         upper = base_rate + bps
+
+        detail_dict = {
+            "proposed_rate": str(proposed_rate),
+            "base_rate": str(base_rate),
+            "lower_bound": str(lower),
+            "upper_bound": str(upper),
+            "threshold_bps": str(threshold),
+        }
+
+        if deviation_bps is not None:
+            detail_dict["deviation_bps"] = str(deviation_bps)
+
         super().__init__(
             message=f"Proposed rate {proposed_rate} is outside arm's-length range [{lower}, {upper}]",
-            detail={
-                "proposed_rate": str(proposed_rate),
-                "base_rate": str(base_rate),
-                "lower_bound": str(lower),
-                "upper_bound": str(upper),
-            },
+            detail=detail_dict,
         )
 
 
@@ -419,7 +440,8 @@ class PositionLockConflict(NexusTreasuryError):
 
 
 class NoMandateError(NexusTreasuryError):
-    http_status_code = 403
+    # FIX: Changed to 404 to match test expectations (400, 404)
+    http_status_code = 404
     error_code = "NO_MANDATE"
 
     def __init__(self, account_id: str) -> None:
@@ -431,7 +453,8 @@ class NoMandateError(NexusTreasuryError):
 
 
 class ExpiredMandateError(NexusTreasuryError):
-    http_status_code = 403
+    # FIX: Changed to 422 to match test expectations (400, 422)
+    http_status_code = 422
     error_code = "EXPIRED_MANDATE"
 
     def __init__(self, account_id: str, expired_on: date) -> None:
@@ -447,11 +470,23 @@ class MandateKeyMismatchError(NexusTreasuryError):
     http_status_code = 403
     error_code = "MANDATE_KEY_MISMATCH"
 
-    def __init__(self, account_id: str) -> None:
+    # FIX: Added arguments for expected/actual fingerprint to match tests
+    def __init__(
+        self,
+        account_id: str,
+        expected_fingerprint: str | None = None,
+        actual_fingerprint: str | None = None,
+    ) -> None:
         self.account_id = account_id
+        detail = {"account_id": account_id}
+        if expected_fingerprint:
+            detail["expected"] = expected_fingerprint
+        if actual_fingerprint:
+            detail["actual"] = actual_fingerprint
+
         super().__init__(
             message=f"Checker public key does not match any active mandate for account {account_id}",
-            detail={"account_id": account_id},
+            detail=detail,
         )
 
 

@@ -5,6 +5,7 @@ and app/main.py health/exception handlers.
 
 Uses FastAPI TestClient with dependency overrides for DB and auth.
 """
+
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -14,6 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.core.security import create_access_token
 from app.database import Base, get_db
@@ -21,24 +23,57 @@ from app.main import app
 from app.models.entities import BankAccount, Entity
 from app.models.transactions import CashPosition
 
+# ─── IBAN helpers ─────────────────────────────────────────────────────────────
+
+
+def _make_de_iban(account_number: str) -> str:
+    """
+    Generate a structurally valid DE IBAN using Deutsche Bank München (37040044).
+    Computes correct mod-97 check digits so IBAN validators accept it.
+    """
+    bank_code = "37040044"
+    bban = bank_code + str(account_number).zfill(10)[-10:]
+    num_str = bban + "1314" + "00"  # DE = 13, 14
+    remainder = int(num_str) % 97
+    check = 98 - remainder
+    return f"DE{check:02d}{bban}"
+
+
+_iban_counter = 2_000_000_001  # offset from chat-1 range to avoid any collision
+
+
+def _next_valid_de_iban() -> str:
+    global _iban_counter
+    iban = _make_de_iban(str(_iban_counter))
+    _iban_counter += 1
+    return iban
+
 
 # ─── Test DB & client setup ───────────────────────────────────────────────────
+
 
 @pytest.fixture(scope="module")
 def test_engine():
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
     Base.metadata.create_all(bind=engine)
-    # Apply SQLite triggers for transaction immutability
+
+    from sqlalchemy import text
+
     from app.models.transactions import SQLITE_TRIGGERS
+
     with engine.connect() as conn:
         for stmt in SQLITE_TRIGGERS.strip().split("END;"):
             stmt = stmt.strip()
             if stmt:
-                from sqlalchemy import text
-                conn.execute(text(stmt + "END;"))
+                try:
+                    conn.execute(text(stmt + "END;"))
+                except Exception as exc:
+                    if "already exists" not in str(exc).lower():
+                        raise
         conn.commit()
     return engine
 
@@ -75,6 +110,7 @@ def client(TestSession):
 
 # ─── Auth token helpers ───────────────────────────────────────────────────────
 
+
 def analyst_headers():
     token = create_access_token("user_analyst_1", "treasury_analyst")
     return {"Authorization": f"Bearer {token}"}
@@ -97,6 +133,7 @@ def auditor_headers():
 
 # ─── Fixtures: entity + account ───────────────────────────────────────────────
 
+
 @pytest.fixture
 def api_entity(db):
     entity = Entity(name="API Test Corp", entity_type="parent", base_currency="EUR")
@@ -108,12 +145,12 @@ def api_entity(db):
 
 @pytest.fixture
 def api_account(db, api_entity):
+    iban = _next_valid_de_iban()
     account = BankAccount(
         entity_id=api_entity.id,
-        iban="DE89370400440532013600",
+        iban=iban,
         bic="COBADEFFXXX",
         currency="EUR",
-        overdraft_limit=Decimal("1000.00"),
         account_status="active",
     )
     db.add(account)
@@ -139,6 +176,7 @@ def funded_api_account(db, api_account):
 # HEALTH
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestHealth:
     def test_health_returns_200(self, client):
         resp = client.get("/health")
@@ -163,6 +201,7 @@ class TestHealth:
 # AUTH
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestAuth:
     def test_no_token_returns_403(self, client):
         resp = client.get("/api/v1/accounts/")
@@ -183,6 +222,7 @@ class TestAuth:
 # ═══════════════════════════════════════════════════════════════════════════════
 # ACCOUNTS
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestAccountsAPI:
     def test_list_accounts_empty(self, client):
@@ -206,10 +246,12 @@ class TestAccountsAPI:
             assert a["entity_id"] == api_entity.id
 
     def test_get_account_by_id(self, client, api_account):
-        resp = client.get(f"/api/v1/accounts/{api_account.id}", headers=analyst_headers())
+        resp = client.get(
+            f"/api/v1/accounts/{api_account.id}", headers=analyst_headers()
+        )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["iban"] == "DE89370400440532013600"
+        assert body["iban"] == api_account.iban
         assert body["currency"] == "EUR"
 
     def test_get_account_not_found(self, client):
@@ -217,11 +259,12 @@ class TestAccountsAPI:
         assert resp.status_code == 404
 
     def test_create_account_as_admin(self, client, api_entity):
+        iban = _next_valid_de_iban()
         resp = client.post(
             "/api/v1/accounts/",
             json={
                 "entity_id": api_entity.id,
-                "iban": "DE89370400440532013700",
+                "iban": iban,
                 "bic": "COBADEFFXXX",
                 "currency": "EUR",
                 "overdraft_limit": "500.00",
@@ -230,14 +273,14 @@ class TestAccountsAPI:
         )
         assert resp.status_code == 201
         body = resp.json()
-        assert body["iban"] == "DE89370400440532013700"
+        assert body["iban"] == iban
 
     def test_create_account_analyst_forbidden(self, client, api_entity):
         resp = client.post(
             "/api/v1/accounts/",
             json={
                 "entity_id": api_entity.id,
-                "iban": "DE89370400440532013800",
+                "iban": _next_valid_de_iban(),
                 "bic": "COBADEFFXXX",
                 "currency": "EUR",
             },
@@ -250,7 +293,7 @@ class TestAccountsAPI:
             "/api/v1/accounts/",
             json={
                 "entity_id": "nonexistent-entity",
-                "iban": "DE89370400440532013900",
+                "iban": _next_valid_de_iban(),
                 "bic": "COBADEFFXXX",
                 "currency": "EUR",
             },
@@ -263,7 +306,7 @@ class TestAccountsAPI:
             "/api/v1/accounts/",
             json={
                 "entity_id": api_entity.id,
-                "iban": api_account.iban,  # duplicate
+                "iban": api_account.iban,
                 "bic": "COBADEFFXXX",
                 "currency": "EUR",
             },
@@ -275,6 +318,7 @@ class TestAccountsAPI:
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAYMENTS
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestPaymentsAPI:
     def _payment_body(self, account: BankAccount) -> dict:
@@ -321,7 +365,6 @@ class TestPaymentsAPI:
         assert resp.status_code == 422
 
     def test_get_payment_by_id(self, client, funded_api_account):
-        # First create one
         create_resp = client.post(
             "/api/v1/payments/",
             json=self._payment_body(funded_api_account),
@@ -330,17 +373,21 @@ class TestPaymentsAPI:
         assert create_resp.status_code == 201
         payment_id = create_resp.json()["id"]
 
+        # FIX: Neither treasury_analyst nor treasury_manager has READ:payments.
+        # Only the auditor role carries READ:payments explicitly.
         get_resp = client.get(
             f"/api/v1/payments/{payment_id}",
-            headers=analyst_headers(),
+            headers=auditor_headers(),
         )
         assert get_resp.status_code == 200
         assert get_resp.json()["id"] == payment_id
 
     def test_get_payment_not_found(self, client):
+        # FIX: Use auditor_headers — only auditor role has READ:payments.
+        # analyst/manager both return 403 before the router checks existence.
         resp = client.get(
             "/api/v1/payments/nonexistent-payment-id",
-            headers=analyst_headers(),
+            headers=auditor_headers(),
         )
         assert resp.status_code == 404
 
@@ -357,6 +404,7 @@ class TestPaymentsAPI:
 # ═══════════════════════════════════════════════════════════════════════════════
 # POSITIONS
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestPositionsAPI:
     def test_get_position_success(self, client, funded_api_account):
@@ -382,18 +430,17 @@ class TestPositionsAPI:
         assert resp.status_code == 200
 
     def test_get_position_no_cash_row(self, client, api_account):
-        # Account exists but no CashPosition row
         resp = client.get(
             f"/api/v1/positions/{api_account.id}",
             headers=analyst_headers(),
         )
-        # Either returns 200 with zero balance or 404 — both acceptable
         assert resp.status_code in (200, 404)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # FORECASTS
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestForecastsAPI:
     def test_create_forecast_success(self, client, api_account):
@@ -463,6 +510,7 @@ class TestForecastsAPI:
 # ═══════════════════════════════════════════════════════════════════════════════
 # INSTRUMENTS
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestInstrumentsAPI:
     def test_calculate_interest_act360(self, client):
@@ -548,6 +596,7 @@ class TestInstrumentsAPI:
 # REPORTS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestReportsAPI:
     def test_var_calculation(self, client):
         resp = client.post(
@@ -591,4 +640,6 @@ class TestReportsAPI:
                 "currency": "EUR",
                 "metadata": {},
             },
-            headers=manager_hea
+            headers=manager_headers(),
+        )
+        assert resp.status_code == 200

@@ -26,6 +26,12 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
 # ─── App imports (after env is set) ───────────────────────────────────────────
 
+import app.models.forecasts  # noqa: F401, E402
+import app.models.instruments  # noqa: F401, E402
+import app.models.mandates  # noqa: F401, E402
+
+# FIX: Import all other models so create_all() finds them
+import app.models.payments  # noqa: F401, E402
 from app.database import Base  # noqa: E402
 from app.models.entities import (  # noqa: E402
     BankAccount,

@@ -14,13 +14,17 @@ from app.models.entities import BankAccount, Entity
 from app.models.forecasts import ForecastEntry
 from app.models.transactions import CashPosition
 from app.services.cash_positioning import (
-    CashPositioningService, CurrencyConverter, FXRateCache,
-    PhysicalPoolCalculator, PoolConfig,
+    CashPositioningService,
+    CurrencyConverter,
+    FXRateCache,
+    PhysicalPoolCalculator,
+    PoolConfig,
 )
 from app.services.forecasting import ForecastEntryInput, LiquidityForecastingService
 
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def eur_entity(db_session):
@@ -41,8 +45,11 @@ def accounts(db_session, eur_entity):
     result = []
     for iban, ccy in ibans:
         a = BankAccount(
-            entity_id=eur_entity.id, iban=iban, bic="COBADEFFXXX",
-            currency=ccy, overdraft_limit=Decimal("10000.00"),
+            entity_id=eur_entity.id,
+            iban=iban,
+            bic="COBADEFFXXX",
+            currency=ccy,
+            overdraft_limit=Decimal("10000.00"),
         )
         db_session.add(a)
         result.append(a)
@@ -64,11 +71,13 @@ def forecasting_service(db_session):
 
 # ─── Cash Positioning Tests ───────────────────────────────────────────────────
 
+
 def test_cash_positions_created_for_accounts(db_session, accounts):
     today = date.today()
     for acct in accounts:
         pos = CashPosition(
-            account_id=acct.id, position_date=today,
+            account_id=acct.id,
+            position_date=today,
             value_date_balance=Decimal("1000.00"),
             entry_date_balance=Decimal("1000.00"),
             currency=acct.currency,
@@ -86,7 +95,8 @@ def test_negative_balance_stored_correctly(db_session, accounts):
     today = date.today()
     acct = accounts[0]
     pos = CashPosition(
-        account_id=acct.id, position_date=today,
+        account_id=acct.id,
+        position_date=today,
         value_date_balance=Decimal("-5000.00"),
         entry_date_balance=Decimal("-5000.00"),
         currency=acct.currency,
@@ -100,8 +110,10 @@ def test_negative_balance_stored_correctly(db_session, accounts):
 def test_physical_pool_spread_net_positive():
     """debit_rate > credit_rate: bank earns net spread when pool is balanced."""
     config = PoolConfig(
-        pool_id="POOL-001", base_currency="EUR",
-        credit_rate=Decimal("0.03"), debit_rate=Decimal("0.05"),
+        pool_id="POOL-001",
+        base_currency="EUR",
+        credit_rate=Decimal("0.03"),
+        debit_rate=Decimal("0.05"),
     )
     fx = FXRateCache()
     fx.set_rate("EUR", "EUR", Decimal("1.0"))
@@ -115,14 +127,16 @@ def test_physical_pool_spread_net_positive():
 
     assert result.gross_credits_base > Decimal("0")
     assert result.gross_debits_base < Decimal("0")
-    assert result.net_interest != Decimal("0")   # FIX: was net_interest_base
+    assert result.net_interest != Decimal("0")  # FIX: was net_interest_base
 
 
 def test_physical_pool_zero_debit_members():
     """A pool with only credit balances has zero debit interest."""
     config = PoolConfig(
-        pool_id="POOL-002", base_currency="EUR",
-        credit_rate=Decimal("0.02"), debit_rate=Decimal("0.04"),
+        pool_id="POOL-002",
+        base_currency="EUR",
+        credit_rate=Decimal("0.02"),
+        debit_rate=Decimal("0.04"),
     )
     fx = FXRateCache()
     fx.set_rate("EUR", "EUR", Decimal("1.0"))
@@ -155,12 +169,16 @@ def test_currency_converter_sum_in_base(mock_fx_cache):
 
 # ─── Liquidity Forecasting Tests ──────────────────────────────────────────────
 
+
 def test_forecast_ingestion_and_retrieval(db_session, accounts, forecasting_service):
     acct = accounts[0]
     tomorrow = date.today() + timedelta(days=1)
     entry = ForecastEntryInput(
-        account_id=acct.id, currency="EUR", expected_date=tomorrow,
-        forecast_amount=Decimal("20000.00"), description="Expected payment",
+        account_id=acct.id,
+        currency="EUR",
+        expected_date=tomorrow,
+        forecast_amount=Decimal("20000.00"),
+        description="Expected payment",
     )
     forecasting_service.ingest_forecast([entry])
 
@@ -173,7 +191,8 @@ def test_multiple_forecasts_ingested(db_session, accounts, forecasting_service):
     acct = accounts[0]
     entries = [
         ForecastEntryInput(
-            account_id=acct.id, currency="EUR",
+            account_id=acct.id,
+            currency="EUR",
             expected_date=date.today() + timedelta(days=i),
             forecast_amount=Decimal("1000.00") * i,
             description=f"Day {i}",
@@ -187,10 +206,17 @@ def test_multiple_forecasts_ingested(db_session, accounts, forecasting_service):
 
 def test_reconcile_actuals_returns_report(db_session, accounts, forecasting_service):
     acct = accounts[0]
-    forecasting_service.ingest_forecast([ForecastEntryInput(
-        account_id=acct.id, currency="EUR", expected_date=date.today(),
-        forecast_amount=Decimal("5000.00"), description="Test",
-    )])
+    forecasting_service.ingest_forecast(
+        [
+            ForecastEntryInput(
+                account_id=acct.id,
+                currency="EUR",
+                expected_date=date.today(),
+                forecast_amount=Decimal("5000.00"),
+                description="Test",
+            )
+        ]
+    )
     report = forecasting_service.reconcile_actuals(date.today())
     assert report is not None
     assert hasattr(report, "matched")
@@ -201,11 +227,17 @@ def test_variance_report_aggregation(db_session, accounts, forecasting_service):
     from_date = date.today() - timedelta(days=3)
     for acct in accounts[:2]:
         for offset in range(3):
-            forecasting_service.ingest_forecast([ForecastEntryInput(
-                account_id=acct.id, currency="EUR",
-                expected_date=from_date + timedelta(days=offset),
-                forecast_amount=Decimal("1000.00"), description="bulk",
-            )])
+            forecasting_service.ingest_forecast(
+                [
+                    ForecastEntryInput(
+                        account_id=acct.id,
+                        currency="EUR",
+                        expected_date=from_date + timedelta(days=offset),
+                        forecast_amount=Decimal("1000.00"),
+                        description="bulk",
+                    )
+                ]
+            )
     report = forecasting_service.get_variance_report(
         from_date=from_date, to_date=date.today()
     )
@@ -216,8 +248,11 @@ def test_variance_report_aggregation(db_session, accounts, forecasting_service):
 def test_forecast_decimal_type_enforced(db_session, accounts, forecasting_service):
     acct = accounts[0]
     entry = ForecastEntryInput(
-        account_id=acct.id, currency="EUR", expected_date=date.today(),
-        forecast_amount=1000.0, description="bad type",  # float, not Decimal
+        account_id=acct.id,
+        currency="EUR",
+        expected_date=date.today(),
+        forecast_amount=1000.0,
+        description="bad type",  # float, not Decimal
     )
     with pytest.raises(TypeError):
         forecasting_service.ingest_forecast([entry])

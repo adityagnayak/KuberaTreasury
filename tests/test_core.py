@@ -2,34 +2,69 @@
 NexusTreasury — Core Utilities Test Suite
 Covers app/core/: business_days, decimal_utils, security, exceptions
 """
+
 from __future__ import annotations
 
 import base64
-import os
-from datetime import date, timedelta
+from datetime import date, datetime  # Added datetime here
 from decimal import Decimal
 
 import pytest
 from fastapi import HTTPException
 
+# --- Moved these imports to the top ---
+from app.core.business_days import BusinessDayAdjuster, get_business_days_between
+from app.core.decimal_utils import (
+    db_round,
+    display_round,
+    is_negative,
+    is_positive,
+    is_zero,
+    monetary,
+    safe_percentage,
+)
+from app.core.exceptions import (
+    AccountNotFoundError,
+    DuplicateStatementError,
+    ExpiredMandateError,
+    InsufficientFundsError,
+    InvalidBusinessDayConventionError,
+    InvalidStateTransitionError,
+    LockedPeriodError,
+    MandateKeyMismatchError,
+    NexusTreasuryError,
+    NoMandateError,
+    PaymentNotFoundError,
+    PaymentValidationError,
+    PermissionDeniedError,
+    SanctionsHitError,
+    SelfApprovalError,
+    TransferPricingViolationError,
+    UnbalancedJournalError,
+)
+from app.core.security import (
+    create_access_token,
+    decode_access_token,
+    decrypt_credential,
+    encrypt_credential,
+    hash_password,
+    verify_password,
+)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # business_days.py
 # ═══════════════════════════════════════════════════════════════════════════════
 
-from app.core.business_days import BusinessDayAdjuster, get_business_days_between
-from app.core.exceptions import InvalidBusinessDayConventionError
-
 
 class TestBusinessDayAdjuster:
     def test_weekday_unchanged(self):
         adjuster = BusinessDayAdjuster("EUR")
-        monday = date(2024, 1, 8)   # Monday
+        monday = date(2024, 1, 8)  # Monday
         assert adjuster.adjust(monday) == monday
 
     def test_saturday_rolls_forward(self):
         adjuster = BusinessDayAdjuster("EUR", convention="following")
-        saturday = date(2024, 1, 6)   # Saturday → Monday Jan 8
+        saturday = date(2024, 1, 6)  # Saturday → Monday Jan 8
         result = adjuster.adjust(saturday)
         assert result.weekday() < 5
         assert result > saturday
@@ -42,7 +77,7 @@ class TestBusinessDayAdjuster:
 
     def test_saturday_preceding_rolls_backward(self):
         adjuster = BusinessDayAdjuster("EUR", convention="preceding")
-        saturday = date(2024, 1, 6)   # Saturday → Friday Jan 5
+        saturday = date(2024, 1, 6)  # Saturday → Friday Jan 5
         result = adjuster.adjust(saturday)
         assert result.weekday() < 5
         assert result < saturday
@@ -51,13 +86,13 @@ class TestBusinessDayAdjuster:
         # Last Saturday of month — should roll BACK, not forward into next month
         adjuster = BusinessDayAdjuster("EUR", convention="modified_following")
         # Find a last-day-of-month that's a Saturday
-        saturday_eom = date(2022, 4, 30)   # April 30 2022 is a Saturday
+        saturday_eom = date(2022, 4, 30)  # April 30 2022 is a Saturday
         result = adjuster.adjust(saturday_eom)
-        assert result.month == 4   # stays in April, rolls back to Friday
+        assert result.month == 4  # stays in April, rolls back to Friday
 
     def test_is_business_day_weekday(self):
         adjuster = BusinessDayAdjuster("USD")
-        assert adjuster.is_business_day(date(2024, 1, 8)) is True   # Monday
+        assert adjuster.is_business_day(date(2024, 1, 8)) is True  # Monday
 
     def test_is_business_day_weekend(self):
         adjuster = BusinessDayAdjuster("USD")
@@ -79,7 +114,18 @@ class TestBusinessDayAdjuster:
         assert adjuster.is_business_day(christmas) is False
 
     def test_all_supported_currencies(self):
-        for ccy in ["USD", "GBP", "EUR", "JPY", "CHF", "AUD", "CAD", "SEK", "NOK", "DKK"]:
+        for ccy in [
+            "USD",
+            "GBP",
+            "EUR",
+            "JPY",
+            "CHF",
+            "AUD",
+            "CAD",
+            "SEK",
+            "NOK",
+            "DKK",
+        ]:
             adj = BusinessDayAdjuster(ccy)
             assert adj.is_business_day(date(2024, 6, 3)) is True  # Monday
 
@@ -114,11 +160,6 @@ class TestGetBusinessDaysBetween:
 # ═══════════════════════════════════════════════════════════════════════════════
 # decimal_utils.py
 # ═══════════════════════════════════════════════════════════════════════════════
-
-from app.core.decimal_utils import (
-    db_round, display_round, is_negative, is_positive, is_zero,
-    monetary, safe_percentage,
-)
 
 
 class TestMonetary:
@@ -197,12 +238,6 @@ class TestSafePercentage:
 # security.py
 # ═══════════════════════════════════════════════════════════════════════════════
 
-from app.core.security import (
-    create_access_token, decode_access_token,
-    decrypt_credential, encrypt_credential,
-    hash_password, verify_password,
-)
-
 
 class TestJWT:
     def test_create_and_decode_round_trip(self):
@@ -255,7 +290,7 @@ class TestPasswordHashing:
     def test_same_password_different_hashes(self):
         h1 = hash_password("samepassword")
         h2 = hash_password("samepassword")
-        assert h1 != h2   # bcrypt uses random salt
+        assert h1 != h2  # bcrypt uses random salt
 
 
 class TestAESEncryption:
@@ -270,7 +305,7 @@ class TestAESEncryption:
         encrypted = encrypt_credential("test_credential")
         # Should be valid base64
         decoded = base64.b64decode(encrypted)
-        assert len(decoded) > 12   # nonce(12) + ciphertext
+        assert len(decoded) > 12  # nonce(12) + ciphertext
 
     def test_different_nonces_each_call(self):
         # Two encryptions of same plaintext should differ (random nonce)
@@ -291,27 +326,6 @@ class TestAESEncryption:
 # ═══════════════════════════════════════════════════════════════════════════════
 # exceptions.py
 # ═══════════════════════════════════════════════════════════════════════════════
-
-from datetime import datetime
-from app.core.exceptions import (
-    AccountNotFoundError,
-    DuplicateStatementError,
-    ExpiredMandateError,
-    InsufficientFundsError,
-    InvalidBusinessDayConventionError,
-    InvalidStateTransitionError,
-    LockedPeriodError,
-    MandateKeyMismatchError,
-    NexusTreasuryError,
-    NoMandateError,
-    PaymentNotFoundError,
-    PaymentValidationError,
-    PermissionDeniedError,
-    SanctionsHitError,
-    SelfApprovalError,
-    TransferPricingViolationError,
-    UnbalancedJournalError,
-)
 
 
 class TestExceptions:

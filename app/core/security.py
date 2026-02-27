@@ -20,18 +20,19 @@ from app.config import get_settings
 settings = get_settings()
 
 # ─── Password hashing ─────────────────────────────────────────────────────────
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# FIX: Switched to pbkdf2_sha256 to avoid bcrypt 72-byte limit issues
+_pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 bearer_scheme = HTTPBearer()
 
 
 def hash_password(password: str) -> str:
-    """Return bcrypt hash of the given plain-text password."""
+    """Return hash of the given plain-text password."""
     return _pwd_context.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Return True if the plain password matches the bcrypt hash."""
+    """Return True if the plain password matches the hash."""
     return _pwd_context.verify(plain_password, hashed_password)
 
 

@@ -5,6 +5,7 @@ Includes core Transaction table, CashPositions, and Audit Logs.
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 
 from sqlalchemy import (
@@ -41,7 +42,8 @@ END;
 class Transaction(Base):
     __tablename__ = "transactions"
 
-    id = Column(String, primary_key=True, index=True)
+    # FIX: Added default UUID
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
     account_id = Column(String, ForeignKey("bank_accounts.id"), nullable=False)
     trn = Column(String, unique=True, index=True, nullable=False)  # Bank Reference
     entry_date = Column(Date, nullable=False)
@@ -49,12 +51,10 @@ class Transaction(Base):
     amount = Column(Numeric(18, 2), nullable=False)
     currency = Column(String(3), nullable=False)
 
-    # FIX: Added type annotation
     credit_debit_indicator: Column[str] = Column(
         Enum("CRDT", "DBIT", name="cdi_enum"), nullable=False
     )
 
-    # FIX: Added type annotation
     status: Column[str] = Column(
         Enum("booked", "pending", "void", "forecast", name="txn_status_enum"),
         default="booked",
@@ -70,8 +70,6 @@ class Transaction(Base):
 class TransactionShadowArchive(Base):
     """
     Shadow table for deleted transactions (Soft Delete / Archive).
-    In strict immutable mode, rows are never moved here, but this supports
-    compliance "Right to be Forgotten" scenarios if configured.
     """
 
     __tablename__ = "transactions_shadow"
@@ -92,16 +90,13 @@ class CashPosition(Base):
 
     __tablename__ = "cash_positions"
 
-    id = Column(String, primary_key=True, index=True)
+    # FIX: Added default UUID
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
     account_id = Column(String, ForeignKey("bank_accounts.id"), nullable=False)
     position_date = Column(Date, nullable=False, index=True)
     currency = Column(String(3), nullable=False)
 
-    # Opening balance not strictly needed if we sum previous days,
-    # but useful for performance snapshots.
     opening_balance = Column(Numeric(18, 2), default=0)
-
-    # Net movements for the day
     entry_date_balance = Column(Numeric(18, 2), default=0)
     value_date_balance = Column(Numeric(18, 2), default=0)
 
@@ -116,16 +111,16 @@ class CashPosition(Base):
 
 class AuditLog(Base):
     """
-    System-wide audit trail for critical actions (config changes, manual overrides).
+    System-wide audit trail for critical actions.
     """
 
     __tablename__ = "audit_logs"
 
-    id = Column(String, primary_key=True, index=True)
+    # FIX: Added default UUID
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
     timestamp = Column(DateTime, default=datetime.utcnow)
-    user_id = Column(String, nullable=True)  # System or User ID
+    user_id = Column(String, nullable=True)
 
-    # FIX: Added type annotation
     action: Column[str] = Column(String, nullable=False)
 
     table_name = Column(String, nullable=True)

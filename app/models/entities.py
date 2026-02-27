@@ -4,6 +4,7 @@ NexusTreasury — Phase 1 & 2 Models: Entities, Accounts, Ingestion Registry
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 
 from sqlalchemy import (
@@ -24,9 +25,9 @@ from app.database import Base
 class Entity(Base):
     __tablename__ = "entities"
 
-    id = Column(String, primary_key=True, index=True)  # UUID
+    # FIX: Added default UUID
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
     name = Column(String, nullable=False)
-    # FIX: Added type annotation
     entity_type: Column[str] = Column(
         Enum("parent", "subsidiary", "spv", name="entity_type_enum"),
         nullable=False,
@@ -43,7 +44,8 @@ class Entity(Base):
 class BankAccount(Base):
     __tablename__ = "bank_accounts"
 
-    id = Column(String, primary_key=True, index=True)  # UUID
+    # FIX: Added default UUID
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
     entity_id = Column(String, ForeignKey("entities.id"), nullable=False)
     account_number = Column(String)
     iban = Column(String, unique=True, index=True, nullable=False)
@@ -53,7 +55,6 @@ class BankAccount(Base):
     bank_name = Column(String)
     country_code = Column(String(2))
 
-    # FIX: Added type annotation
     account_status: Column[str] = Column(
         Enum("active", "closed", "blocked", name="account_status_enum"),
         default="active",
@@ -64,6 +65,7 @@ class BankAccount(Base):
     entity = relationship("Entity", back_populates="accounts")
     transactions = relationship("Transaction", back_populates="account")
     cash_positions = relationship("CashPosition", back_populates="account")
+    payments = relationship("Payment", back_populates="debtor_account")
 
 
 class StatementRegistry(Base):
@@ -74,7 +76,8 @@ class StatementRegistry(Base):
 
     __tablename__ = "statement_registry"
 
-    id = Column(String, primary_key=True, index=True)
+    # FIX: Added default UUID
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
     account_id = Column(String, ForeignKey("bank_accounts.id"), nullable=False)
     file_hash = Column(String, unique=True, index=True, nullable=False)
     message_id = Column(String, nullable=False)
@@ -84,7 +87,6 @@ class StatementRegistry(Base):
     imported_by = Column(String)
     format = Column(String)  # camt053 | mt940
 
-    # FIX: Added type annotation
     status: Column[str] = Column(
         Enum("pending", "processed", "failed", name="ingest_status_enum"),
         default="pending",
@@ -96,7 +98,8 @@ class StatementGap(Base):
 
     __tablename__ = "statement_gaps"
 
-    id = Column(String, primary_key=True, index=True)
+    # FIX: Added default UUID
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
     account_id = Column(String, ForeignKey("bank_accounts.id"), nullable=False)
     expected_date = Column(Date, nullable=False)
     detected_at = Column(DateTime, default=datetime.utcnow)
@@ -111,7 +114,8 @@ class PeriodLock(Base):
 
     __tablename__ = "period_locks"
 
-    id = Column(String, primary_key=True, index=True)
+    # FIX: Added default UUID
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
     locked_until = Column(Date, nullable=False)
     locked_by = Column(String)
     locked_at = Column(DateTime, default=datetime.utcnow)
@@ -125,7 +129,8 @@ class PendingPeriodAdjustment(Base):
 
     __tablename__ = "pending_period_adjustments"
 
-    id = Column(String, primary_key=True, index=True)
+    # FIX: Added default UUID
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
     transaction_id = Column(String, ForeignKey("transactions.id"))
     account_id = Column(String, ForeignKey("bank_accounts.id"))
     value_date = Column(Date, nullable=False)  # The locked date
