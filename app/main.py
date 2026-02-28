@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 
 # FIX: Imports moved to top to satisfy E402
 from app.api.v1 import accounts, forecasts, instruments, payments, positions, reports
+from app.api.v1.auth import router as auth_router
 from app.config import get_settings
 from app.core.exceptions import NexusTreasuryError
 
@@ -144,3 +145,4 @@ app.include_router(positions.router, prefix=API_PREFIX)
 app.include_router(forecasts.router, prefix=API_PREFIX)
 app.include_router(instruments.router, prefix=API_PREFIX)
 app.include_router(reports.router, prefix=API_PREFIX)
+app.include_router(auth_router)
