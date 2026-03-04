@@ -184,8 +184,15 @@ jobs:
           vercel deploy --prebuilt --token "$VERCEL_TOKEN"
 
       - name: Staging smoke check (optional)
-        if: ${{ secrets.STAGING_API_HEALTH_URL != '' }}
-        run: curl -f -L --max-time 20 "${{ secrets.STAGING_API_HEALTH_URL }}"
+        env:
+          STAGING_API_HEALTH_URL: ${{ secrets.STAGING_API_HEALTH_URL }}
+        shell: bash
+        run: |
+          if [ -n "${STAGING_API_HEALTH_URL:-}" ]; then
+            curl -f -L --max-time 20 "$STAGING_API_HEALTH_URL"
+          else
+            echo "Skipping staging smoke check (STAGING_API_HEALTH_URL not set)."
+          fi
 
   deploy-production:
     name: Deploy Production
@@ -235,5 +242,12 @@ jobs:
           vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN"
 
       - name: Production smoke check (optional)
-        if: ${{ secrets.PRODUCTION_API_HEALTH_URL != '' }}
-        run: curl -f -L --max-time 20 "${{ secrets.PRODUCTION_API_HEALTH_URL }}"
+        env:
+          PRODUCTION_API_HEALTH_URL: ${{ secrets.PRODUCTION_API_HEALTH_URL }}
+        shell: bash
+        run: |
+          if [ -n "${PRODUCTION_API_HEALTH_URL:-}" ]; then
+            curl -f -L --max-time 20 "$PRODUCTION_API_HEALTH_URL"
+          else
+            echo "Skipping production smoke check (PRODUCTION_API_HEALTH_URL not set)."
+          fi
