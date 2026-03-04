@@ -26,7 +26,9 @@ class Settings(BaseSettings):
     # USER ACTION REQUIRED (production): set a strong random secret via environment variable.
     JWT_SECRET_KEY: str = "change-me-in-production-must-be-32-chars-min"
     JWT_ALGORITHM: str = "HS256"
-    JWT_ACCESS_TOKEN_TTL_MINUTES: int = 15
+    JWT_ACCESS_TOKEN_TTL_MINUTES: int = 60
+    JWT_REFRESH_TOKEN_TTL_DAYS: int = 30
+    JWT_REFRESH_COOKIE_NAME: str = "kubera_refresh_token"
     BCRYPT_ROUNDS: int = 12
     # USER ACTION REQUIRED: set AES-256 key material (recommended: 32-byte random value encoded/managed per your KMS policy).
     MFA_TOTP_ENCRYPTION_KEY: str | None = None
@@ -48,9 +50,24 @@ class Settings(BaseSettings):
         "https://www.trade-tariff.service.gov.uk/api/v2/exchange_rates/files"
     )
     HMRC_SANDBOX_MODE: bool = True
+    HMRC_CLIENT_ID: str | None = None
+    HMRC_CLIENT_SECRET: str | None = None
+    HMRC_OAUTH_REDIRECT_URI: str | None = None
+    # USER ACTION REQUIRED: set a dedicated AES-256 key (32-byte hex) for HMRC OAuth token encryption.
+    HMRC_TOKEN_ENCRYPTION_KEY: str | None = None
 
     # --- Payments ---
     PAYMENT_INITIATION_MODE: str = "manual_pain001_only"
+    SANCTIONS_MATCH_THRESHOLD: Decimal = Decimal("85")
+    SANCTIONS_PROXIMITY_THRESHOLD: Decimal = Decimal("60")
+    AML_STRUCTURING_NEAR_THRESHOLD_GBP: Decimal = Decimal("250")
+
+    # --- Security policy ---
+    DEFAULT_CONCURRENT_SESSION_LIMIT: int = 3
+    DEFAULT_INACTIVITY_TIMEOUT_MINUTES: int = 60
+    ACCOUNT_LOCKOUT_FAILED_ATTEMPTS: int = 5
+    ACCOUNT_LOCKOUT_MINUTES: int = 15
+    ACCOUNT_ALERT_FAILED_ATTEMPTS: int = 10
 
     # --- CIR thresholds ---
     CIR_ALERT_THRESHOLD: Decimal = Decimal("1500000.00")

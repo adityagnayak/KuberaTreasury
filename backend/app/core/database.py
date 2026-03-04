@@ -6,12 +6,16 @@ Engine and session factory are created lazily on first use so that importing
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+import contextvars
+import uuid
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.orm import Session, with_loader_criteria
+from sqlalchemy import event
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -21,6 +25,32 @@ class Base(DeclarativeBase):
 
 _engine = None
 _AsyncSessionLocal = None
+tenant_context: contextvars.ContextVar[uuid.UUID | None] = contextvars.ContextVar("tenant_context", default=None)
+
+
+def set_tenant_context(tenant_id: uuid.UUID | None) -> contextvars.Token:
+    return tenant_context.set(tenant_id)
+
+
+def reset_tenant_context(token: contextvars.Token) -> None:
+    tenant_context.reset(token)
+
+
+@event.listens_for(Session, "do_orm_execute")
+def _tenant_filter(execute_state):
+    tenant_id = tenant_context.get()
+    if tenant_id is None:
+        return
+    if not execute_state.is_select:
+        return
+
+    mapper_classes = [m.class_ for m in Base.registry.mappers if hasattr(m.class_, "tenant_id")]
+    statement = execute_state.statement
+    for cls in mapper_classes:
+        statement = statement.options(
+            with_loader_criteria(cls, lambda model: model.tenant_id == tenant_id, include_aliases=True)
+        )
+    execute_state.statement = statement
 
 
 def _get_engine():

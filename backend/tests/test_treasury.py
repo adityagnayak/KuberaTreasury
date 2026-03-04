@@ -314,6 +314,70 @@ def test_monthly_board_pack_returns_signed_payload() -> None:
     assert len(out.digital_signature) == 64
 
 
+def test_report_audit_history_order_and_limit() -> None:
+    svc = TreasuryService()
+    tenant_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    svc.export_daily_variance_report(
+        DailyVarianceExportRequest(
+            tenant_id=tenant_id,
+            operator_user_id=user_id,
+            as_of=date(2026, 3, 4),
+            rows=[VarianceRow(entity="UK", currency="GBP", forecast=Decimal("100"), actual=Decimal("120"))],
+        )
+    )
+    svc.export_weekly_summary_report(
+        WeeklySummaryExportRequest(
+            tenant_id=tenant_id,
+            operator_user_id=user_id,
+            as_of=date(2026, 3, 4),
+            week_start=date(2026, 3, 2),
+            week_end=date(2026, 3, 8),
+            opening_position=Decimal("1000"),
+            closing_position=Decimal("1200"),
+            net_flows=Decimal("150"),
+            fx_impact=Decimal("20"),
+            hmrc_obligations=[],
+            forecast_actual_pairs=[(Decimal("100"), Decimal("120"))],
+        )
+    )
+
+    history = svc.report_audit_history(limit=1)
+    assert len(history) == 1
+    assert history[0].report_name == "weekly_summary"
+
+
+def test_report_audit_history_api_endpoint() -> None:
+    app = create_app()
+    client = TestClient(app)
+
+    client.post(
+        "/api/v1/treasury/reports/daily-variance/export",
+        json={
+            "tenant_id": str(uuid.uuid4()),
+            "operator_user_id": str(uuid.uuid4()),
+            "as_of": "2026-03-04",
+            "rows": [
+                {
+                    "entity": "UK",
+                    "currency": "GBP",
+                    "forecast": "100",
+                    "actual": "120",
+                }
+            ],
+        },
+    )
+
+    history_resp = client.get("/api/v1/treasury/reports/audit-history?limit=1")
+    assert history_resp.status_code == 200
+    body = history_resp.json()
+    assert len(body) == 1
+    assert body[0]["report_name"] == "daily_variance"
+    assert body[0]["report_id"]
+    assert body[0]["timestamp"]
+
+
 def test_treasury_api_endpoints() -> None:
     app = create_app()
     client = TestClient(app)

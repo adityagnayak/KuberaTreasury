@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
+from fastapi import Query
 
 from app.services.treasury_service import (
     BoardPackRequest,
@@ -18,6 +19,7 @@ from app.services.treasury_service import (
     PositionRequest,
     ConsolidatedPosition,
     ReportExportResponse,
+    ReportAuditEvent,
     SweepSimulationRequest,
     SweepSimulationResponse,
     TreasuryService,
@@ -78,3 +80,8 @@ async def export_weekly_summary(payload: WeeklySummaryExportRequest) -> ReportEx
 @router.post("/reports/monthly-board-pack", response_model=BoardPackResponse, summary="Monthly board pack export")
 async def monthly_board_pack(payload: BoardPackRequest) -> BoardPackResponse:
     return _svc.monthly_board_pack(payload)
+
+
+@router.get("/reports/audit-history", response_model=list[ReportAuditEvent], summary="Report generation audit history")
+async def report_audit_history(limit: int = Query(default=100, ge=1, le=500)) -> list[ReportAuditEvent]:
+    return _svc.report_audit_history(limit=limit)

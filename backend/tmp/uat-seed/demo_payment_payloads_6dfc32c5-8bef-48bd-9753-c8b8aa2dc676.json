@@ -1,0 +1,25 @@
+{
+  "tenant_id": "6dfc32c5-8bef-48bd-9753-c8b8aa2dc676",
+  "initiator_role": "treasury_analyst",
+  "approval_expectation": [
+    "treasury_manager",
+    "compliance_officer"
+  ],
+  "examples": [
+    {
+      "name": "standard_gbp_payment",
+      "amount": "5000.00",
+      "currency_code": "GBP",
+      "urgent": false,
+      "same_day": false
+    },
+    {
+      "name": "urgent_non_gbp_payment",
+      "amount": "25000.00",
+      "currency_code": "USD",
+      "urgent": true,
+      "same_day": true
+    }
+  ],
+  "note": "USER ACTION REQUIRED: replace counterparty/account identifiers with tenant-specific IDs."
+}

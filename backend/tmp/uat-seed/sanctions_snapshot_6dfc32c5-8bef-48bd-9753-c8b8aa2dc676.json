@@ -1,0 +1,15 @@
+{
+  "tenant_id": "6dfc32c5-8bef-48bd-9753-c8b8aa2dc676",
+  "generated_at": "2026-03-04T18:55:25.304863+00:00",
+  "source": "UAT bootstrap default set",
+  "ofsi_fuzzy_threshold": 85,
+  "proximity_log_threshold": 60,
+  "entities": [
+    "Bank Melli Iran",
+    "Islamic Revolutionary Guard Corps",
+    "National Iranian Oil Company",
+    "Syrian Arab Airlines",
+    "Belarusian State Security Committee"
+  ],
+  "note": "USER ACTION REQUIRED: replace this default snapshot with latest OFSI UK consolidated sanctions list before production."
+}

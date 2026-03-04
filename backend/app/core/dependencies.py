@@ -45,7 +45,8 @@ async def get_current_user(
         user_id: str | None = payload.get("sub")
         tenant_id: str | None = payload.get("tenant_id")
         roles: list[str] = payload.get("roles", [])
-        if not user_id or not tenant_id:
+        token_type: str | None = payload.get("type")
+        if token_type != "access" or not user_id or not tenant_id:
             raise credentials_exc
         return CurrentUser(
             user_id=uuid.UUID(user_id),

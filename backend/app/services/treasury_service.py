@@ -302,6 +302,15 @@ class ReportExportResponse(BaseModel):
     audit_log: dict[str, str]
 
 
+class ReportAuditEvent(BaseModel):
+    report_id: str
+    report_name: str
+    tenant_id: str
+    operator_user_id: str
+    timestamp: datetime
+    parameters_hash: str
+
+
 class BoardPackRequest(BaseModel):
     tenant_id: uuid.UUID
     operator_user_id: uuid.UUID
@@ -395,6 +404,22 @@ class TreasuryService:
             digital_signature=digital_signature,
             audit_log=audit_log,
         )
+
+    def report_audit_history(self, *, limit: int = 100) -> list[ReportAuditEvent]:
+        if limit < 1:
+            limit = 1
+        ordered = list(reversed(self._report_audit_events))[:limit]
+        return [
+            ReportAuditEvent(
+                report_id=event["report_id"],
+                report_name=event.get("report_name", "unknown"),
+                tenant_id=event["tenant_id"],
+                operator_user_id=event["operator_user_id"],
+                timestamp=datetime.fromisoformat(event["timestamp"]),
+                parameters_hash=event["parameters_hash"],
+            )
+            for event in ordered
+        ]
 
     @staticmethod
     def _bucket(days: int) -> str:
@@ -863,6 +888,7 @@ class TreasuryService:
         digital_signature = _hash_text(report_id + generated_at.isoformat() + _hash_text(pdf_bytes.hex()))
         audit_log = {
             "report_id": report_id,
+            "report_name": "monthly_board_pack",
             "tenant_id": str(payload.tenant_id),
             "operator_user_id": str(payload.operator_user_id),
             "timestamp": generated_at.isoformat(),
