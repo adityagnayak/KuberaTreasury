@@ -73,7 +73,7 @@ class JournalCreate(BaseModel):
     journal_reference: str = Field(..., min_length=1, max_length=60)
     description: str | None = None
     currency_code: str = Field(default="GBP", min_length=3, max_length=3)
-    lines: list[JournalLineCreate] = Field(..., min_length=2)
+    lines: list[JournalLineCreate] = Field(..., min_length=1)
 
 
 class RecurringTemplateCreate(BaseModel):
@@ -257,7 +257,7 @@ class LedgerService:
                 )
             )
         await self._db.flush()
-        return journal
+        return await self._get_journal_with_lines(journal.journal_id)
 
     async def post_journal(self, journal_id: uuid.UUID, from_ip: str = "") -> Journal:
         journal = await self._get_journal_with_lines(journal_id)

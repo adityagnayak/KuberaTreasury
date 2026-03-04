@@ -57,8 +57,8 @@ async def post_journal(
 async def reverse_journal(
     journal_id: uuid.UUID,
     target_period_id: uuid.UUID,
+    svc: Annotated[LedgerService, Depends(_svc)],
     description: str | None = None,
-    svc: Annotated[LedgerService, Depends(_svc)] = Depends(_svc),
 ) -> JournalRead:
     rev = await svc.reverse_journal(journal_id, target_period_id, description)
     return JournalRead.model_validate(rev)

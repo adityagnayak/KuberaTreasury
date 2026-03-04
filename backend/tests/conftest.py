@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import AsyncIterator
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 
 from app.core.database import Base
@@ -37,6 +38,11 @@ async def _init_engine():
             echo=False,
             connect_args={"check_same_thread": False},
         )
+
+        @event.listens_for(_engine.sync_engine, "connect")
+        def _sqlite_functions(dbapi_conn, _record):
+            dbapi_conn.create_function("now", 0, lambda: datetime.utcnow().isoformat(sep=" "))
+
         async with _engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         _session_factory = async_sessionmaker(_engine, expire_on_commit=False, class_=AsyncSession)

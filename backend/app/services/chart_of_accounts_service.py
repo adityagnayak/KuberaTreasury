@@ -134,9 +134,10 @@ class ChartOfAccountsService:
     method ensures no cross-tenant access.
     """
 
-    def __init__(self, db: AsyncSession, tenant_id: uuid.UUID) -> None:
+    def __init__(self, db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID | None = None) -> None:
         self._db = db
         self._tenant_id = tenant_id
+        self._user_id = user_id
 
     async def seed_uk_standard(self) -> list[ChartOfAccount]:
         """Insert the full UK standard CoA for a new tenant (idempotent)."""

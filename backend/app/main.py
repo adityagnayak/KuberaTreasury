@@ -19,6 +19,7 @@ from app.api.v1.hedges import router as hedge_router
 from app.api.v1.fx_revaluation import router as fx_router
 from app.api.v1.intercompany import router as ic_router
 from app.api.v1.accounting_period import router as period_router
+from app.api.v1.treasury import router as treasury_router
 
 
 # ─────────────────────────────────────────────────── Security headers ──────────
@@ -84,6 +85,7 @@ def create_app() -> FastAPI:
     app.include_router(fx_router, prefix=API_PREFIX)
     app.include_router(ic_router, prefix=API_PREFIX)
     app.include_router(period_router, prefix=API_PREFIX)
+    app.include_router(treasury_router, prefix=API_PREFIX)
 
     @app.get("/health", tags=["Health"])
     async def health() -> dict:
