@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from app.main import create_app
 from app.services.treasury_service import (
     BoardPackRequest,
+    DailyVarianceExportRequest,
     DailyVarianceRequest,
     FacilityRow,
     ForecastInferenceRequest,
@@ -21,6 +22,7 @@ from app.services.treasury_service import (
     SweepSimulationRequest,
     TreasuryService,
     VarianceRow,
+    WeeklySummaryExportRequest,
     WeeklySummaryRequest,
 )
 
@@ -108,6 +110,33 @@ def test_hmrc_obligations_standard_ct_and_vat() -> None:
     assert any(o.obligation_type == "CONFIRMATION_STATEMENT" for o in out)
 
 
+def test_hmrc_paye_cis_cheque_due_date_uses_19th() -> None:
+    svc = TreasuryService()
+    tenant_id = uuid.uuid4()
+    out = svc.populate_hmrc_obligations(
+        HmrcScheduleRequest(
+            tenant_id=tenant_id,
+            as_of=date(2026, 3, 1),
+            vat_quarter_end_dates=[],
+            corporation_tax_year_end=date(2026, 12, 31),
+            large_company_ct=False,
+            paye_months=[date(2026, 3, 1)],
+            paye_payment_method="cheque",
+            cis_months=[date(2026, 3, 1)],
+            cis_payment_method="cheque",
+            confirmation_statement_anniversary=date(2026, 8, 15),
+            estimated_vat_amount=Decimal("0"),
+            estimated_ct_amount=Decimal("0"),
+            estimated_paye_amount=Decimal("100"),
+            estimated_cis_amount=Decimal("100"),
+        )
+    )
+    paye_due = [o.due_date for o in out if o.obligation_type == "PAYE_NIC"][0]
+    cis_due = [o.due_date for o in out if o.obligation_type == "CIS"][0]
+    assert paye_due == date(2026, 4, 19)
+    assert cis_due == date(2026, 4, 19)
+
+
 def test_ai_forecast_validation_pipeline_and_hashing() -> None:
     svc = TreasuryService()
     tenant_id = uuid.uuid4()
@@ -131,8 +160,67 @@ def test_ai_forecast_validation_pipeline_and_hashing() -> None:
     assert len(out.accepted) == 1
     assert out.accepted[0].human_review_required is True
     assert len(out.rejected) == 2
-    assert out.audit_log[0].provider in {"claude", "ollama"}
+    assert out.audit_log[0].provider in {"claude", "ollama", "gemini"}
     assert len(out.accepted[0].account_ref_hash) == 64
+
+
+def test_ai_forecast_supports_gemini_provider() -> None:
+    svc = TreasuryService()
+    out = svc.process_ai_forecast(
+        ForecastInferenceRequest(
+            tenant_id=uuid.uuid4(),
+            operator_user_id=uuid.uuid4(),
+            as_of=date(2026, 3, 1),
+            horizon_days=30,
+            provider="gemini",
+            model_version="gemini-2.0-flash",
+            rows=[
+                ForecastRowInput(
+                    account_id="ACC-GEM-1",
+                    forecast_date=date(2026, 3, 10),
+                    amount=Decimal("100"),
+                    confidence=Decimal("0.80"),
+                )
+            ],
+            prompt="forecast prompt",
+            raw_response="forecast response",
+            latency_ms=45,
+        )
+    )
+    assert out.provider == "gemini"
+    assert out.model_version == "gemini-2.0-flash"
+    assert len(out.accepted) == 1
+    assert len(out.rejected) == 0
+
+
+def test_ai_forecast_gemini_deprecated_toggle(monkeypatch) -> None:
+    monkeypatch.setenv("AI_PROVIDER_GEMINI_DEPRECATED", "true")
+    svc = TreasuryService()
+    out = svc.process_ai_forecast(
+        ForecastInferenceRequest(
+            tenant_id=uuid.uuid4(),
+            operator_user_id=uuid.uuid4(),
+            as_of=date(2026, 3, 1),
+            horizon_days=30,
+            provider="gemini",
+            model_version="gemini-2.0-flash",
+            rows=[
+                ForecastRowInput(
+                    account_id="ACC-GEM-DEP-1",
+                    forecast_date=date(2026, 3, 10),
+                    amount=Decimal("100"),
+                    confidence=Decimal("0.80"),
+                )
+            ],
+            prompt="forecast prompt",
+            raw_response="forecast response",
+            latency_ms=45,
+        )
+    )
+    assert out.provider == "gemini"
+    assert len(out.accepted) == 0
+    assert len(out.rejected) == 1
+    assert out.rejected[0].reason == "provider_deprecated_gemini"
 
 
 def test_daily_variance_and_weekly_summary() -> None:
@@ -160,6 +248,47 @@ def test_daily_variance_and_weekly_summary() -> None:
     )
     assert weekly.position_movement == Decimal("200.00")
     assert weekly.ai_forecast_mape > 0
+
+
+def test_daily_and_weekly_exports_return_signed_payloads() -> None:
+    svc = TreasuryService()
+    tenant_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    daily_export = svc.export_daily_variance_report(
+        DailyVarianceExportRequest(
+            tenant_id=tenant_id,
+            operator_user_id=user_id,
+            as_of=date(2026, 3, 4),
+            rows=[VarianceRow(entity="UK", currency="GBP", forecast=Decimal("100"), actual=Decimal("120"))],
+        )
+    )
+    assert daily_export.report_id
+    assert len(daily_export.pdf_bytes) > 0
+    assert len(daily_export.excel_bytes) > 0
+    assert len(daily_export.digital_signature) == 64
+    assert daily_export.audit_log["report_name"] == "daily_variance"
+
+    weekly_export = svc.export_weekly_summary_report(
+        WeeklySummaryExportRequest(
+            tenant_id=tenant_id,
+            operator_user_id=user_id,
+            as_of=date(2026, 3, 4),
+            week_start=date(2026, 3, 2),
+            week_end=date(2026, 3, 8),
+            opening_position=Decimal("1000"),
+            closing_position=Decimal("1200"),
+            net_flows=Decimal("150"),
+            fx_impact=Decimal("20"),
+            hmrc_obligations=[],
+            forecast_actual_pairs=[(Decimal("100"), Decimal("120"))],
+        )
+    )
+    assert weekly_export.report_id
+    assert len(weekly_export.pdf_bytes) > 0
+    assert len(weekly_export.excel_bytes) > 0
+    assert len(weekly_export.digital_signature) == 64
+    assert weekly_export.audit_log["report_name"] == "weekly_summary"
 
 
 def test_monthly_board_pack_returns_signed_payload() -> None:
@@ -232,3 +361,41 @@ def test_treasury_api_endpoints() -> None:
     )
     assert ai_resp.status_code == 200
     assert ai_resp.json()["hitl_enforced"] is True
+
+    daily_export_resp = client.post(
+        "/api/v1/treasury/reports/daily-variance/export",
+        json={
+            "tenant_id": str(uuid.uuid4()),
+            "operator_user_id": str(uuid.uuid4()),
+            "as_of": "2026-03-04",
+            "rows": [
+                {
+                    "entity": "UK",
+                    "currency": "GBP",
+                    "forecast": "100",
+                    "actual": "120",
+                }
+            ],
+        },
+    )
+    assert daily_export_resp.status_code == 200
+    assert len(daily_export_resp.json()["digital_signature"]) == 64
+
+    weekly_export_resp = client.post(
+        "/api/v1/treasury/reports/weekly-summary/export",
+        json={
+            "tenant_id": str(uuid.uuid4()),
+            "operator_user_id": str(uuid.uuid4()),
+            "as_of": "2026-03-04",
+            "week_start": "2026-03-02",
+            "week_end": "2026-03-08",
+            "opening_position": "1000",
+            "closing_position": "1200",
+            "net_flows": "150",
+            "fx_impact": "20",
+            "hmrc_obligations": [],
+            "forecast_actual_pairs": [["100", "120"]],
+        },
+    )
+    assert weekly_export_resp.status_code == 200
+    assert len(weekly_export_resp.json()["digital_signature"]) == 64

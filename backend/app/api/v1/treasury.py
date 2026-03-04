@@ -6,6 +6,7 @@ from fastapi import APIRouter
 from app.services.treasury_service import (
     BoardPackRequest,
     BoardPackResponse,
+    DailyVarianceExportRequest,
     DailyVarianceReport,
     DailyVarianceRequest,
     ForecastInferenceRequest,
@@ -16,9 +17,11 @@ from app.services.treasury_service import (
     LiquidityResponse,
     PositionRequest,
     ConsolidatedPosition,
+    ReportExportResponse,
     SweepSimulationRequest,
     SweepSimulationResponse,
     TreasuryService,
+    WeeklySummaryExportRequest,
     WeeklySummaryReport,
     WeeklySummaryRequest,
 )
@@ -57,9 +60,19 @@ async def daily_variance(payload: DailyVarianceRequest) -> DailyVarianceReport:
     return _svc.daily_variance_report(payload)
 
 
+@router.post("/reports/daily-variance/export", response_model=ReportExportResponse, summary="Daily variance PDF + Excel export")
+async def export_daily_variance(payload: DailyVarianceExportRequest) -> ReportExportResponse:
+    return _svc.export_daily_variance_report(payload)
+
+
 @router.post("/reports/weekly-summary", response_model=WeeklySummaryReport, summary="Weekly treasury summary")
 async def weekly_summary(payload: WeeklySummaryRequest) -> WeeklySummaryReport:
     return _svc.weekly_summary_report(payload)
+
+
+@router.post("/reports/weekly-summary/export", response_model=ReportExportResponse, summary="Weekly summary PDF + Excel export")
+async def export_weekly_summary(payload: WeeklySummaryExportRequest) -> ReportExportResponse:
+    return _svc.export_weekly_summary_report(payload)
 
 
 @router.post("/reports/monthly-board-pack", response_model=BoardPackResponse, summary="Monthly board pack export")

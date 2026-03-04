@@ -31,6 +31,13 @@ def _hash_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _urgency(due_date: date, as_of: date) -> Literal["green", "amber", "red"]:
     days = (due_date - as_of).days
     if days < 7:
@@ -42,6 +49,12 @@ def _urgency(due_date: date, as_of: date) -> Literal["green", "amber", "red"]:
 
 def _end_of_month(d: date) -> date:
     return date(d.year, d.month, monthrange(d.year, d.month)[1])
+
+
+def _next_month_due_day(period_end: date, day: int) -> date:
+    first_of_next = _add_months(date(period_end.year, period_end.month, 1), 1)
+    due_day = min(day, monthrange(first_of_next.year, first_of_next.month)[1])
+    return date(first_of_next.year, first_of_next.month, due_day)
 
 
 def _add_months(d: date, months: int) -> date:
@@ -157,7 +170,9 @@ class HmrcScheduleRequest(BaseModel):
     corporation_tax_year_end: date
     large_company_ct: bool = False
     paye_months: list[date] = Field(default_factory=list)
+    paye_payment_method: Literal["cheque", "electronic"] = "electronic"
     cis_months: list[date] = Field(default_factory=list)
+    cis_payment_method: Literal["cheque", "electronic"] = "electronic"
     confirmation_statement_anniversary: date
     estimated_vat_amount: Decimal = Decimal("0")
     estimated_ct_amount: Decimal = Decimal("0")
@@ -179,7 +194,7 @@ class ForecastInferenceRequest(BaseModel):
     horizon_days: int = Field(default=90, ge=1, le=366)
     rows: list[ForecastRowInput]
     amount_bound: Decimal = Field(default=Decimal("50000000"), gt=Decimal("0"))
-    provider: Literal["ollama", "claude"] | None = None
+    provider: Literal["ollama", "claude", "gemini"] | None = None
     model_version: str = "claude-sonnet-4-6"
     prompt: str
     raw_response: str
@@ -239,6 +254,11 @@ class DailyVarianceRequest(BaseModel):
     rows: list[VarianceRow]
 
 
+class DailyVarianceExportRequest(DailyVarianceRequest):
+    tenant_id: uuid.UUID
+    operator_user_id: uuid.UUID
+
+
 class DailyVarianceReport(BaseModel):
     as_of: date
     by_entity_currency: list[dict[str, Decimal | str]]
@@ -256,6 +276,11 @@ class WeeklySummaryRequest(BaseModel):
     forecast_actual_pairs: list[tuple[Decimal, Decimal]] = Field(default_factory=list)
 
 
+class WeeklySummaryExportRequest(WeeklySummaryRequest):
+    tenant_id: uuid.UUID
+    operator_user_id: uuid.UUID
+
+
 class WeeklySummaryReport(BaseModel):
     week_start: date
     week_end: date
@@ -264,6 +289,17 @@ class WeeklySummaryReport(BaseModel):
     fx_impact: Decimal
     hmrc_due_this_week: list[HmrcObligation]
     ai_forecast_mape: Decimal
+
+
+class ReportExportResponse(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, ser_json_bytes="base64")
+
+    report_id: str
+    generated_at: datetime
+    pdf_bytes: bytes
+    excel_bytes: bytes
+    digital_signature: str
+    audit_log: dict[str, str]
 
 
 class BoardPackRequest(BaseModel):
@@ -281,7 +317,7 @@ class BoardPackRequest(BaseModel):
 
 
 class BoardPackResponse(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, ser_json_bytes="base64")
 
     report_id: str
     generated_at: datetime
@@ -302,6 +338,63 @@ class TreasuryService:
 
     def __init__(self) -> None:
         self._report_audit_events: list[dict[str, str]] = []
+
+    def _export_report(
+        self,
+        *,
+        report_name: str,
+        report_title: str,
+        tenant_id: uuid.UUID,
+        operator_user_id: uuid.UUID,
+        parameters_hash: str,
+        pdf_lines: list[str],
+        csv_lines: list[str],
+    ) -> ReportExportResponse:
+        report_id = str(uuid.uuid4())
+        generated_at = datetime.now(tz=timezone.utc)
+
+        pdf_buffer = io.BytesIO()
+        c = canvas.Canvas(pdf_buffer, pagesize=A4)
+        c.setTitle(report_title)
+        c.drawString(50, 800, report_title)
+        c.drawString(50, 785, f"Report ID: {report_id}")
+        c.drawString(50, 770, f"Generated: {generated_at.isoformat()}")
+        y = 745
+        for line in pdf_lines:
+            c.drawString(50, y, line)
+            y -= 15
+            if y <= 60:
+                c.showPage()
+                y = 800
+        c.showPage()
+        c.save()
+        pdf_bytes = pdf_buffer.getvalue()
+
+        excel_bytes = "\n".join(csv_lines).encode("utf-8")
+        digital_signature = _hash_text(
+            report_id
+            + generated_at.isoformat()
+            + _hash_text(pdf_bytes.hex())
+            + _hash_text(excel_bytes.hex())
+        )
+        audit_log = {
+            "report_id": report_id,
+            "report_name": report_name,
+            "tenant_id": str(tenant_id),
+            "operator_user_id": str(operator_user_id),
+            "timestamp": generated_at.isoformat(),
+            "parameters_hash": parameters_hash,
+        }
+        self._report_audit_events.append(audit_log)
+
+        return ReportExportResponse(
+            report_id=report_id,
+            generated_at=generated_at,
+            pdf_bytes=pdf_bytes,
+            excel_bytes=excel_bytes,
+            digital_signature=digital_signature,
+            audit_log=audit_log,
+        )
 
     @staticmethod
     def _bucket(days: int) -> str:
@@ -496,8 +589,8 @@ class TreasuryService:
 
         for period in payload.paye_months:
             period_end = _end_of_month(period)
-            due = date(period_end.year, period_end.month, 22) + timedelta(days=31)
-            due = date(due.year, due.month, 22)
+            due_day = 19 if payload.paye_payment_method == "cheque" else 22
+            due = _next_month_due_day(period_end, due_day)
             obligations.append(
                 HmrcObligation(
                     obligation_type="PAYE_NIC",
@@ -510,8 +603,8 @@ class TreasuryService:
 
         for period in payload.cis_months:
             period_end = _end_of_month(period)
-            due = date(period_end.year, period_end.month, 22) + timedelta(days=31)
-            due = date(due.year, due.month, 22)
+            due_day = 19 if payload.cis_payment_method == "cheque" else 22
+            due = _next_month_due_day(period_end, due_day)
             obligations.append(
                 HmrcObligation(
                     obligation_type="CIS",
@@ -535,7 +628,54 @@ class TreasuryService:
         return sorted(obligations, key=lambda x: x.due_date)
 
     def process_ai_forecast(self, payload: ForecastInferenceRequest) -> ForecastInferenceResponse:
+        # USER ACTION REQUIRED: set AI_PROVIDER (`ollama` for UAT, `claude`/`gemini` for production) in environment.
         provider = payload.provider or os.getenv("AI_PROVIDER") or "claude"
+        if provider not in {"ollama", "claude", "gemini"}:
+            provider = "claude"
+
+        model_version = payload.model_version
+        if provider == "gemini" and model_version == "claude-sonnet-4-6":
+            model_version = os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash")
+
+        if provider == "gemini" and _env_flag("AI_PROVIDER_GEMINI_DEPRECATED", default=False):
+            rejected_rows = [
+                ForecastRejectedRow(
+                    account_ref_hash=_hash_text(row.account_id),
+                    forecast_date=row.forecast_date,
+                    amount=_round_2(row.amount),
+                    confidence=row.confidence,
+                    reason="provider_deprecated_gemini",
+                )
+                for row in payload.rows
+            ]
+            prompt_hash = _hash_text(payload.prompt)
+            response_hash = _hash_text(payload.raw_response)
+            representative_hash = rejected_rows[0].account_ref_hash if rejected_rows else _hash_text("none")
+            audit = InferenceAuditRecord(
+                provider=provider,
+                model_version=model_version,
+                account_ref_hash=representative_hash,
+                prompt_hash=prompt_hash,
+                response_hash=response_hash,
+                latency_ms=payload.latency_ms,
+                accepted_count=0,
+                rejected_count=len(rejected_rows),
+                operator_user_id=payload.operator_user_id,
+                tenant_id=payload.tenant_id,
+            )
+            return ForecastInferenceResponse(
+                provider=provider,
+                model_version=model_version,
+                accepted=[],
+                rejected=rejected_rows,
+                rejection_log=rejected_rows,
+                audit_log=[audit],
+                gdpr_summary=(
+                    "Account identifiers hashed with SHA-256; only aggregated daily net flows processed; "
+                    "no IBAN/BIC/counterparty data accepted. Gemini path deprecated by configuration."
+                ),
+            )
+
         accepted: list[ForecastAcceptedRow] = []
         rejected: list[ForecastRejectedRow] = []
 
@@ -578,7 +718,7 @@ class TreasuryService:
 
         audit = InferenceAuditRecord(
             provider=provider,
-            model_version=payload.model_version,
+            model_version=model_version,
             account_ref_hash=representative_hash,
             prompt_hash=prompt_hash,
             response_hash=response_hash,
@@ -591,7 +731,7 @@ class TreasuryService:
 
         return ForecastInferenceResponse(
             provider=provider,
-            model_version=payload.model_version,
+            model_version=model_version,
             accepted=accepted,
             rejected=rejected,
             rejection_log=rejected,
@@ -614,6 +754,29 @@ class TreasuryService:
             )
         return DailyVarianceReport(as_of=payload.as_of, by_entity_currency=out)
 
+    def export_daily_variance_report(self, payload: DailyVarianceExportRequest) -> ReportExportResponse:
+        report = self.daily_variance_report(payload)
+        csv_lines = ["entity,currency,forecast,actual,variance"]
+        pdf_lines = [f"As of: {report.as_of.isoformat()}"]
+
+        for row in report.by_entity_currency:
+            csv_lines.append(
+                f"{row['entity']},{row['currency']},{row['forecast']},{row['actual']},{row['variance']}"
+            )
+            pdf_lines.append(
+                f"{row['entity']} {row['currency']} F:{row['forecast']} A:{row['actual']} V:{row['variance']}"
+            )
+
+        return self._export_report(
+            report_name="daily_variance",
+            report_title="KuberaTreasury Daily Variance Report",
+            tenant_id=payload.tenant_id,
+            operator_user_id=payload.operator_user_id,
+            parameters_hash=_hash_text(payload.model_dump_json()),
+            pdf_lines=pdf_lines,
+            csv_lines=csv_lines,
+        )
+
     def weekly_summary_report(self, payload: WeeklySummaryRequest) -> WeeklySummaryReport:
         hmrc_due = [
             item
@@ -635,6 +798,39 @@ class TreasuryService:
             fx_impact=_round_2(payload.fx_impact),
             hmrc_due_this_week=hmrc_due,
             ai_forecast_mape=_round_2(mape),
+        )
+
+    def export_weekly_summary_report(self, payload: WeeklySummaryExportRequest) -> ReportExportResponse:
+        report = self.weekly_summary_report(payload)
+        csv_lines = ["metric,value"]
+        csv_lines.extend(
+            [
+                f"week_start,{report.week_start.isoformat()}",
+                f"week_end,{report.week_end.isoformat()}",
+                f"position_movement,{report.position_movement}",
+                f"net_flows,{report.net_flows}",
+                f"fx_impact,{report.fx_impact}",
+                f"ai_forecast_mape,{report.ai_forecast_mape}",
+                f"hmrc_due_count,{len(report.hmrc_due_this_week)}",
+            ]
+        )
+        pdf_lines = [
+            f"Week: {report.week_start.isoformat()} to {report.week_end.isoformat()}",
+            f"Position movement: {report.position_movement}",
+            f"Net flows: {report.net_flows}",
+            f"FX impact: {report.fx_impact}",
+            f"AI forecast MAPE: {report.ai_forecast_mape}",
+            f"HMRC due this week: {len(report.hmrc_due_this_week)}",
+        ]
+
+        return self._export_report(
+            report_name="weekly_summary",
+            report_title="KuberaTreasury Weekly Treasury Summary",
+            tenant_id=payload.tenant_id,
+            operator_user_id=payload.operator_user_id,
+            parameters_hash=_hash_text(payload.model_dump_json()),
+            pdf_lines=pdf_lines,
+            csv_lines=csv_lines,
         )
 
     def monthly_board_pack(self, payload: BoardPackRequest) -> BoardPackResponse:

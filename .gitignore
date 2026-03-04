@@ -41,6 +41,12 @@ out/
 Thumbs.db
 desktop.ini
 
+#db
+*db.sqlite3
+*.db
+*.db-wal
+*db.shm
+
 # Alembic
 alembic/versions/__pycache__/
 
@@ -50,3 +56,6 @@ logs/
 
 # Docker
 *.override.yml
+
+# UAT temporary signing keys
+tmp/uat-keys/

@@ -48,3 +48,41 @@
 - Dependency scanning in CI: `pip-audit` and `npm audit` required gates.
 - Secrets policy: rotation, no secrets in source control, and signing key lifecycle.
 - Vulnerability disclosure process defined in `SECURITY.md`.
+
+## Phase 3 Mapping (Liquidity, HMRC Forecasting, AI)
+
+Detailed component-to-regulation traceability is captured in `docs/PHASE3_REGULATION_MAPPING.md`.
+
+- Group liquidity position and maturity buckets (`same day`, `1-7`, `8-30`, `31-90`, `90+`) implemented in `backend/app/services/treasury_service.py` (`consolidated_position`).
+- Intraday sweep simulation and available liquidity (`cash + undrawn facilities - payment queue`) implemented in `treasury_service.py` (`simulate_intraday_sweep`, `available_liquidity_and_alerts`).
+- Alert engine coverage:
+  - minimum balance breach,
+  - overdraft approach at 80% limit,
+  - concentration risk above 40% bank concentration,
+  - covenant headroom alert at <=10%.
+- HMRC scheduling automation in `populate_hmrc_obligations`:
+  - VAT due date (month + 7 days after filing period),
+  - Corporation Tax standard (`9 months + 1 day`) and large-company quarterly instalments (`months 7,10,13,16`),
+  - PAYE/NIC and CIS monthly scheduling,
+  - annual Companies House confirmation statement,
+  - urgency colour and payment reference generation.
+- AI provider controls:
+  - provider/model switch (`AI_PROVIDER=ollama` UAT, `claude` or `gemini` production),
+  - controlled Gemini deprecation switch (`AI_PROVIDER_GEMINI_DEPRECATED=true`) without code removal,
+  - model version `claude-sonnet-4-6` supported.
+- GDPR non-negotiables in `process_ai_forecast`:
+  - account reference pseudonymisation via SHA-256,
+  - processing scope restricted to aggregated daily net flows,
+  - no personal data payload fields accepted for inference.
+- ISO 9001 §8.3 validation pipeline in `process_ai_forecast`:
+  - confidence floor of 0.40,
+  - tenant-configurable amount bounds (default ±£50M),
+  - forecast date horizon validation,
+  - human review flag for >£1M or confidence >0.90,
+  - explicit rejection log with reason(s).
+- Audit log for every inference produced as `InferenceAuditRecord` including provider, model_version, account_ref_hash, prompt_hash, response_hash, latency_ms, accepted/rejected counts, operator_user_id, tenant_id.
+- Human-in-the-loop enforced by design: accepted AI outputs are returned as `pending_human_review`; no direct ledger write path is implemented in this service.
+- Reporting controls:
+  - daily variance report (`forecast vs actual` by entity/currency),
+  - weekly treasury summary (movement, net flows, FX impact, HMRC due this week, MAPE),
+  - monthly board pack export with PDF + Excel payloads and report generation audit metadata.
