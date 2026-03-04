@@ -1,4 +1,5 @@
 """FX Revaluation — FastAPI v1 router."""
+
 from __future__ import annotations
 
 import uuid
@@ -50,13 +51,19 @@ async def fetch_hmrc_rates(
     return [HmrcRateRead.model_validate(r) for r in rows]
 
 
-@router.get("/rates", response_model=list[HmrcRateRead], summary="List ingested HMRC exchange rates")
+@router.get(
+    "/rates",
+    response_model=list[HmrcRateRead],
+    summary="List ingested HMRC exchange rates",
+)
 async def list_rates(
     svc: Annotated[FxRevaluationService, Depends(_svc)],
     published_date: date | None = Query(default=None),
     currency_code: str | None = Query(default=None),
 ) -> list[HmrcRateRead]:
-    rows = await svc.list_rates(published_date=published_date, currency_code=currency_code)
+    rows = await svc.list_rates(
+        published_date=published_date, currency_code=currency_code
+    )
     return [HmrcRateRead.model_validate(r) for r in rows]
 
 

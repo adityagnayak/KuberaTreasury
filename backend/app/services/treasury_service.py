@@ -7,6 +7,7 @@ Satisfies:
 - Human-in-the-loop policy (forecast rows never posted to ledger automatically).
 - Report generation payloads with audit trail records.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -152,7 +153,9 @@ class LiquidityResponse(BaseModel):
 
 
 class HmrcObligation(BaseModel):
-    obligation_type: Literal["VAT", "CORP_TAX", "PAYE_NIC", "CIS", "CONFIRMATION_STATEMENT"]
+    obligation_type: Literal[
+        "VAT", "CORP_TAX", "PAYE_NIC", "CIS", "CONFIRMATION_STATEMENT"
+    ]
     due_date: date
     estimated_amount: Decimal
     actual_amount: Decimal | None = None
@@ -442,16 +445,28 @@ class TreasuryService:
         by_bank: dict[str, Decimal] = {}
         by_account: dict[str, Decimal] = {}
         by_currency: dict[str, Decimal] = {}
-        buckets = {"same_day": Decimal("0"), "d1_7": Decimal("0"), "d8_30": Decimal("0"), "d31_90": Decimal("0"), "d90_plus": Decimal("0")}
+        buckets = {
+            "same_day": Decimal("0"),
+            "d1_7": Decimal("0"),
+            "d8_30": Decimal("0"),
+            "d31_90": Decimal("0"),
+            "d90_plus": Decimal("0"),
+        }
 
         total = Decimal("0")
         for row in payload.rows:
             amount_base = self._to_base(row)
             total += amount_base
-            by_entity[row.entity] = by_entity.get(row.entity, Decimal("0")) + amount_base
+            by_entity[row.entity] = (
+                by_entity.get(row.entity, Decimal("0")) + amount_base
+            )
             by_bank[row.bank] = by_bank.get(row.bank, Decimal("0")) + amount_base
-            by_account[row.account_id] = by_account.get(row.account_id, Decimal("0")) + amount_base
-            by_currency[row.currency] = by_currency.get(row.currency, Decimal("0")) + row.balance
+            by_account[row.account_id] = (
+                by_account.get(row.account_id, Decimal("0")) + amount_base
+            )
+            by_currency[row.currency] = (
+                by_currency.get(row.currency, Decimal("0")) + row.balance
+            )
             buckets[self._bucket(row.maturity_days)] += amount_base
 
         return ConsolidatedPosition(
@@ -464,16 +479,19 @@ class TreasuryService:
             maturity_buckets={k: _round_2(v) for k, v in buckets.items()},
         )
 
-    def simulate_intraday_sweep(self, payload: SweepSimulationRequest) -> SweepSimulationResponse:
-        before = self.consolidated_position(PositionRequest(base_currency=payload.base_currency, rows=payload.rows)).consolidated_group_position
-        by_account_after = {
-            row.account_id: self._to_base(row)
-            for row in payload.rows
-        }
+    def simulate_intraday_sweep(
+        self, payload: SweepSimulationRequest
+    ) -> SweepSimulationResponse:
+        before = self.consolidated_position(
+            PositionRequest(base_currency=payload.base_currency, rows=payload.rows)
+        ).consolidated_group_position
+        by_account_after = {row.account_id: self._to_base(row) for row in payload.rows}
         queue_total = Decimal("0")
         for pmt in payload.proposed_payments:
             queue_total += pmt.amount_base
-            by_account_after[pmt.account_id] = by_account_after.get(pmt.account_id, Decimal("0")) - pmt.amount_base
+            by_account_after[pmt.account_id] = (
+                by_account_after.get(pmt.account_id, Decimal("0")) - pmt.amount_base
+            )
         after = before - queue_total
         return SweepSimulationResponse(
             before_position=_round_2(before),
@@ -482,7 +500,9 @@ class TreasuryService:
             by_account_after={k: _round_2(v) for k, v in by_account_after.items()},
         )
 
-    def available_liquidity_and_alerts(self, payload: LiquidityRequest) -> LiquidityResponse:
+    def available_liquidity_and_alerts(
+        self, payload: LiquidityRequest
+    ) -> LiquidityResponse:
         cash_total = sum((self._to_base(row) for row in payload.rows), Decimal("0"))
         undrawn_total = sum((fac.undrawn for fac in payload.facilities), Decimal("0"))
         queue_total = sum((p.amount_base for p in payload.payment_queue), Decimal("0"))
@@ -572,10 +592,16 @@ class TreasuryService:
     def _ch_reference(tenant_id: uuid.UUID, anniversary: date) -> str:
         return f"CH-{str(tenant_id).split('-')[0]}-{anniversary.strftime('%Y%m%d')}"
 
-    def populate_hmrc_obligations(self, payload: HmrcScheduleRequest) -> list[HmrcObligation]:
+    def populate_hmrc_obligations(
+        self, payload: HmrcScheduleRequest
+    ) -> list[HmrcObligation]:
         obligations: list[HmrcObligation] = []
 
-        vat_periods = payload.vat_month_end_dates if payload.vat_monthly_mtd else payload.vat_quarter_end_dates
+        vat_periods = (
+            payload.vat_month_end_dates
+            if payload.vat_monthly_mtd
+            else payload.vat_quarter_end_dates
+        )
         for period_end in vat_periods:
             due = _add_months(period_end, 1) + timedelta(days=7)
             obligations.append(
@@ -595,9 +621,13 @@ class TreasuryService:
                     HmrcObligation(
                         obligation_type="CORP_TAX",
                         due_date=due,
-                        estimated_amount=_round_2(payload.estimated_ct_amount / Decimal("4")),
+                        estimated_amount=_round_2(
+                            payload.estimated_ct_amount / Decimal("4")
+                        ),
                         urgency_colour=_urgency(due, payload.as_of),
-                        hmrc_payment_reference=self._ct_reference(payload.tenant_id, payload.corporation_tax_year_end),
+                        hmrc_payment_reference=self._ct_reference(
+                            payload.tenant_id, payload.corporation_tax_year_end
+                        ),
                     )
                 )
         else:
@@ -608,7 +638,9 @@ class TreasuryService:
                     due_date=due,
                     estimated_amount=_round_2(payload.estimated_ct_amount),
                     urgency_colour=_urgency(due, payload.as_of),
-                    hmrc_payment_reference=self._ct_reference(payload.tenant_id, payload.corporation_tax_year_end),
+                    hmrc_payment_reference=self._ct_reference(
+                        payload.tenant_id, payload.corporation_tax_year_end
+                    ),
                 )
             )
 
@@ -622,7 +654,9 @@ class TreasuryService:
                     due_date=due,
                     estimated_amount=_round_2(payload.estimated_paye_amount),
                     urgency_colour=_urgency(due, payload.as_of),
-                    hmrc_payment_reference=self._paye_reference(payload.tenant_id, period_end),
+                    hmrc_payment_reference=self._paye_reference(
+                        payload.tenant_id, period_end
+                    ),
                 )
             )
 
@@ -636,7 +670,9 @@ class TreasuryService:
                     due_date=due,
                     estimated_amount=_round_2(payload.estimated_cis_amount),
                     urgency_colour=_urgency(due, payload.as_of),
-                    hmrc_payment_reference=self._cis_reference(payload.tenant_id, period_end),
+                    hmrc_payment_reference=self._cis_reference(
+                        payload.tenant_id, period_end
+                    ),
                 )
             )
 
@@ -645,14 +681,20 @@ class TreasuryService:
                 obligation_type="CONFIRMATION_STATEMENT",
                 due_date=payload.confirmation_statement_anniversary,
                 estimated_amount=Decimal("0"),
-                urgency_colour=_urgency(payload.confirmation_statement_anniversary, payload.as_of),
-                hmrc_payment_reference=self._ch_reference(payload.tenant_id, payload.confirmation_statement_anniversary),
+                urgency_colour=_urgency(
+                    payload.confirmation_statement_anniversary, payload.as_of
+                ),
+                hmrc_payment_reference=self._ch_reference(
+                    payload.tenant_id, payload.confirmation_statement_anniversary
+                ),
             )
         )
 
         return sorted(obligations, key=lambda x: x.due_date)
 
-    def process_ai_forecast(self, payload: ForecastInferenceRequest) -> ForecastInferenceResponse:
+    def process_ai_forecast(
+        self, payload: ForecastInferenceRequest
+    ) -> ForecastInferenceResponse:
         # USER ACTION REQUIRED: set AI_PROVIDER (`ollama` for UAT, `claude`/`gemini` for production) in environment.
         provider = payload.provider or os.getenv("AI_PROVIDER") or "claude"
         if provider not in {"ollama", "claude", "gemini"}:
@@ -662,7 +704,9 @@ class TreasuryService:
         if provider == "gemini" and model_version == "claude-sonnet-4-6":
             model_version = os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash")
 
-        if provider == "gemini" and _env_flag("AI_PROVIDER_GEMINI_DEPRECATED", default=False):
+        if provider == "gemini" and _env_flag(
+            "AI_PROVIDER_GEMINI_DEPRECATED", default=False
+        ):
             rejected_rows = [
                 ForecastRejectedRow(
                     account_ref_hash=_hash_text(row.account_id),
@@ -675,7 +719,11 @@ class TreasuryService:
             ]
             prompt_hash = _hash_text(payload.prompt)
             response_hash = _hash_text(payload.raw_response)
-            representative_hash = rejected_rows[0].account_ref_hash if rejected_rows else _hash_text("none")
+            representative_hash = (
+                rejected_rows[0].account_ref_hash
+                if rejected_rows
+                else _hash_text("none")
+            )
             audit = InferenceAuditRecord(
                 provider=provider,
                 model_version=model_version,
@@ -733,13 +781,20 @@ class TreasuryService:
                     forecast_date=row.forecast_date,
                     amount=_round_2(row.amount),
                     confidence=row.confidence,
-                    human_review_required=(abs(row.amount) > Decimal("1000000") or row.confidence > Decimal("0.90")),
+                    human_review_required=(
+                        abs(row.amount) > Decimal("1000000")
+                        or row.confidence > Decimal("0.90")
+                    ),
                 )
             )
 
         prompt_hash = _hash_text(payload.prompt)
         response_hash = _hash_text(payload.raw_response)
-        representative_hash = accepted[0].account_ref_hash if accepted else (rejected[0].account_ref_hash if rejected else _hash_text("none"))
+        representative_hash = (
+            accepted[0].account_ref_hash
+            if accepted
+            else (rejected[0].account_ref_hash if rejected else _hash_text("none"))
+        )
 
         audit = InferenceAuditRecord(
             provider=provider,
@@ -764,7 +819,9 @@ class TreasuryService:
             gdpr_summary="Account identifiers hashed with SHA-256; only aggregated daily net flows processed; no IBAN/BIC/counterparty data accepted.",
         )
 
-    def daily_variance_report(self, payload: DailyVarianceRequest) -> DailyVarianceReport:
+    def daily_variance_report(
+        self, payload: DailyVarianceRequest
+    ) -> DailyVarianceReport:
         out: list[dict[str, Decimal | str]] = []
         for row in payload.rows:
             variance = row.actual - row.forecast
@@ -779,7 +836,9 @@ class TreasuryService:
             )
         return DailyVarianceReport(as_of=payload.as_of, by_entity_currency=out)
 
-    def export_daily_variance_report(self, payload: DailyVarianceExportRequest) -> ReportExportResponse:
+    def export_daily_variance_report(
+        self, payload: DailyVarianceExportRequest
+    ) -> ReportExportResponse:
         report = self.daily_variance_report(payload)
         csv_lines = ["entity,currency,forecast,actual,variance"]
         pdf_lines = [f"As of: {report.as_of.isoformat()}"]
@@ -802,7 +861,9 @@ class TreasuryService:
             csv_lines=csv_lines,
         )
 
-    def weekly_summary_report(self, payload: WeeklySummaryRequest) -> WeeklySummaryReport:
+    def weekly_summary_report(
+        self, payload: WeeklySummaryRequest
+    ) -> WeeklySummaryReport:
         hmrc_due = [
             item
             for item in payload.hmrc_obligations
@@ -814,18 +875,26 @@ class TreasuryService:
                 continue
             abs_pct_errors.append(abs((actual - forecast) / actual) * Decimal("100"))
 
-        mape = (sum(abs_pct_errors, Decimal("0")) / Decimal(len(abs_pct_errors))) if abs_pct_errors else Decimal("0")
+        mape = (
+            (sum(abs_pct_errors, Decimal("0")) / Decimal(len(abs_pct_errors)))
+            if abs_pct_errors
+            else Decimal("0")
+        )
         return WeeklySummaryReport(
             week_start=payload.week_start,
             week_end=payload.week_end,
-            position_movement=_round_2(payload.closing_position - payload.opening_position),
+            position_movement=_round_2(
+                payload.closing_position - payload.opening_position
+            ),
             net_flows=_round_2(payload.net_flows),
             fx_impact=_round_2(payload.fx_impact),
             hmrc_due_this_week=hmrc_due,
             ai_forecast_mape=_round_2(mape),
         )
 
-    def export_weekly_summary_report(self, payload: WeeklySummaryExportRequest) -> ReportExportResponse:
+    def export_weekly_summary_report(
+        self, payload: WeeklySummaryExportRequest
+    ) -> ReportExportResponse:
         report = self.weekly_summary_report(payload)
         csv_lines = ["metric,value"]
         csv_lines.extend(
@@ -868,8 +937,16 @@ class TreasuryService:
         c.drawString(50, 800, "KuberaTreasury Monthly Board Pack")
         c.drawString(50, 785, f"Report ID: {report_id}")
         c.drawString(50, 770, f"Generated: {generated_at.isoformat()}")
-        c.drawString(50, 745, "Sections: liquidity waterfall, HMRC schedule, debt maturity, FX exposure,")
-        c.drawString(50, 730, "covenant headroom, IFRS 9 hedges, AI accuracy, transfer pricing summary.")
+        c.drawString(
+            50,
+            745,
+            "Sections: liquidity waterfall, HMRC schedule, debt maturity, FX exposure,",
+        )
+        c.drawString(
+            50,
+            730,
+            "covenant headroom, IFRS 9 hedges, AI accuracy, transfer pricing summary.",
+        )
         c.showPage()
         c.save()
         pdf_bytes = pdf_buffer.getvalue()
@@ -885,7 +962,9 @@ class TreasuryService:
         ]
         excel_bytes = "\n".join(csv_lines).encode("utf-8")
 
-        digital_signature = _hash_text(report_id + generated_at.isoformat() + _hash_text(pdf_bytes.hex()))
+        digital_signature = _hash_text(
+            report_id + generated_at.isoformat() + _hash_text(pdf_bytes.hex())
+        )
         audit_log = {
             "report_id": report_id,
             "report_name": "monthly_board_pack",

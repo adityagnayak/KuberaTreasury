@@ -1,4 +1,5 @@
 """Tests for Chart of Accounts service — CoA CRUD, UK seeder, HMRC nominal mapping."""
+
 from __future__ import annotations
 
 import uuid
@@ -23,8 +24,11 @@ def _svc(db, tenant_id, user_id):
 
 # ─────────────────────────────────────────────── seed tests ────────────────────
 
+
 @pytest.mark.asyncio
-async def test_seed_uk_standard_creates_accounts(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_seed_uk_standard_creates_accounts(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     svc = _svc(db, tenant_id, user_id)
     accounts = await svc.seed_uk_standard()
     assert len(accounts) == len(UK_STANDARD_COA)
@@ -40,7 +44,9 @@ async def test_seed_idempotent(db: AsyncSession, tenant: Tenant, tenant_id, user
 
 
 @pytest.mark.asyncio
-async def test_seed_includes_hmrc_nominal_codes(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_seed_includes_hmrc_nominal_codes(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     svc = _svc(db, tenant_id, user_id)
     accounts = await svc.seed_uk_standard()
     codes_with_nominal = [a for a in accounts if a.hmrc_nominal_code]
@@ -48,7 +54,9 @@ async def test_seed_includes_hmrc_nominal_codes(db: AsyncSession, tenant: Tenant
 
 
 @pytest.mark.asyncio
-async def test_seed_has_vat_input_output_accounts(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_seed_has_vat_input_output_accounts(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     svc = _svc(db, tenant_id, user_id)
     await svc.seed_uk_standard()
     all_accts = await svc.list_all()
@@ -58,6 +66,7 @@ async def test_seed_has_vat_input_output_accounts(db: AsyncSession, tenant: Tena
 
 
 # ─────────────────────────────────────────────── CRUD tests ────────────────────
+
 
 @pytest.mark.asyncio
 async def test_create_account(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
@@ -77,14 +86,21 @@ async def test_create_account(db: AsyncSession, tenant: Tenant, tenant_id, user_
 async def test_get_account(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
     svc = _svc(db, tenant_id, user_id)
     created = await svc.create(
-        AccountCreate(account_code="8001", account_name="Bank", account_type="asset", currency_code="GBP")
+        AccountCreate(
+            account_code="8001",
+            account_name="Bank",
+            account_type="asset",
+            currency_code="GBP",
+        )
     )
     fetched = await svc.get(created.account_id)
     assert fetched.account_id == created.account_id
 
 
 @pytest.mark.asyncio
-async def test_get_nonexistent_raises_not_found(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_get_nonexistent_raises_not_found(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     svc = _svc(db, tenant_id, user_id)
     with pytest.raises(NotFoundError):
         await svc.get(uuid.uuid4())
@@ -94,7 +110,12 @@ async def test_get_nonexistent_raises_not_found(db: AsyncSession, tenant: Tenant
 async def test_update_account(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
     svc = _svc(db, tenant_id, user_id)
     acct = await svc.create(
-        AccountCreate(account_code="7777", account_name="Old Name", account_type="expense", currency_code="GBP")
+        AccountCreate(
+            account_code="7777",
+            account_name="Old Name",
+            account_type="expense",
+            currency_code="GBP",
+        )
     )
     updated = await svc.update(acct.account_id, AccountUpdate(account_name="New Name"))
     assert updated.account_name == "New Name"
@@ -104,7 +125,12 @@ async def test_update_account(db: AsyncSession, tenant: Tenant, tenant_id, user_
 async def test_deactivate_account(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
     svc = _svc(db, tenant_id, user_id)
     acct = await svc.create(
-        AccountCreate(account_code="6666", account_name="ToDelete", account_type="liability", currency_code="GBP")
+        AccountCreate(
+            account_code="6666",
+            account_name="ToDelete",
+            account_type="liability",
+            currency_code="GBP",
+        )
     )
     await svc.deactivate(acct.account_id)
     fetched = await svc.get(acct.account_id)
@@ -112,10 +138,17 @@ async def test_deactivate_account(db: AsyncSession, tenant: Tenant, tenant_id, u
 
 
 @pytest.mark.asyncio
-async def test_list_all_filters_by_tenant(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_list_all_filters_by_tenant(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     svc = _svc(db, tenant_id, user_id)
     await svc.create(
-        AccountCreate(account_code="5500", account_name="Acct A", account_type="asset", currency_code="GBP")
+        AccountCreate(
+            account_code="5500",
+            account_name="Acct A",
+            account_type="asset",
+            currency_code="GBP",
+        )
     )
     # Different tenant should not return the above account
     other_tenant_id = uuid.uuid4()
@@ -126,7 +159,9 @@ async def test_list_all_filters_by_tenant(db: AsyncSession, tenant: Tenant, tena
 
 
 @pytest.mark.asyncio
-async def test_vat_treatment_stored_on_create(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_vat_treatment_stored_on_create(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     svc = _svc(db, tenant_id, user_id)
     acct = await svc.create(
         AccountCreate(

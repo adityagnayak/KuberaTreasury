@@ -1,4 +1,5 @@
 """Application configuration — loaded once at startup from environment."""
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -17,7 +18,9 @@ class Settings(BaseSettings):
     FRONTEND_BASE_URL: str = "http://localhost:5173"
 
     # --- DB ---
-    DATABASE_URL: str = "postgresql+psycopg://postgres:postgres@localhost:5432/kuberatreasury"
+    DATABASE_URL: str = (
+        "postgresql+psycopg://postgres:postgres@localhost:5432/kuberatreasury"
+    )
     REPORTING_DATABASE_URL: str | None = None
     DATABASE_POOL_SIZE: int = 20
     DATABASE_MAX_OVERFLOW: int = 20
@@ -32,6 +35,10 @@ class Settings(BaseSettings):
     BCRYPT_ROUNDS: int = 12
     # USER ACTION REQUIRED: set AES-256 key material (recommended: 32-byte random value encoded/managed per your KMS policy).
     MFA_TOTP_ENCRYPTION_KEY: str | None = None
+    # USER ACTION REQUIRED: 32-byte hex-encoded key for AES-256-GCM PII field encryption.
+    # Must be set to a strong random value in production. Defaults to an all-zero
+    # test key when absent — do NOT use default in production environments.
+    PII_ENCRYPTION_KEY: str | None = None
 
     # --- AI ---
     # USER ACTION REQUIRED when AI_PROVIDER=claude: add Anthropic API key in environment.
@@ -61,6 +68,10 @@ class Settings(BaseSettings):
     SANCTIONS_MATCH_THRESHOLD: Decimal = Decimal("85")
     SANCTIONS_PROXIMITY_THRESHOLD: Decimal = Decimal("60")
     AML_STRUCTURING_NEAR_THRESHOLD_GBP: Decimal = Decimal("250")
+    # USER ACTION REQUIRED (production): set Redis URL for beneficiary verification cache.
+    # Omitting this falls back to a safe in-process TTL cache.
+    REDIS_URL: str | None = None
+    BENEFICIARY_CACHE_TTL_SECONDS: int = 86400  # 24 hours
 
     # --- Security policy ---
     DEFAULT_CONCURRENT_SESSION_LIMIT: int = 3

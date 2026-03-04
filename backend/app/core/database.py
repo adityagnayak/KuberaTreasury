@@ -3,6 +3,7 @@
 Engine and session factory are created lazily on first use so that importing
 ``Base`` (e.g. in the test suite) never requires a live database driver.
 """
+
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
@@ -25,7 +26,9 @@ class Base(DeclarativeBase):
 
 _engine = None
 _AsyncSessionLocal = None
-tenant_context: contextvars.ContextVar[uuid.UUID | None] = contextvars.ContextVar("tenant_context", default=None)
+tenant_context: contextvars.ContextVar[uuid.UUID | None] = contextvars.ContextVar(
+    "tenant_context", default=None
+)
 
 
 def set_tenant_context(tenant_id: uuid.UUID | None) -> contextvars.Token:
@@ -44,11 +47,15 @@ def _tenant_filter(execute_state):
     if not execute_state.is_select:
         return
 
-    mapper_classes = [m.class_ for m in Base.registry.mappers if hasattr(m.class_, "tenant_id")]
+    mapper_classes = [
+        m.class_ for m in Base.registry.mappers if hasattr(m.class_, "tenant_id")
+    ]
     statement = execute_state.statement
     for cls in mapper_classes:
         statement = statement.options(
-            with_loader_criteria(cls, lambda model: model.tenant_id == tenant_id, include_aliases=True)
+            with_loader_criteria(
+                cls, lambda model: model.tenant_id == tenant_id, include_aliases=True
+            )
         )
     execute_state.statement = statement
 
@@ -56,7 +63,10 @@ def _tenant_filter(execute_state):
 def _get_engine():
     global _engine
     if _engine is None:
-        from app.core.config import settings  # deferred to avoid import-time side-effects
+        from app.core.config import (
+            settings,
+        )  # deferred to avoid import-time side-effects
+
         _engine = create_async_engine(
             settings.DATABASE_URL,
             pool_size=settings.DATABASE_POOL_SIZE,

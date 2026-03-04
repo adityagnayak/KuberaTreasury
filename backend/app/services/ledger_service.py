@@ -8,6 +8,7 @@ Satisfies:
 - Audit: every post logged with user, timestamp, IP, tenant_id via audit_events.
 - VAT journals: T0/T1 postings auto-generate input/output VAT lines (HMRC VAT Notice 700).
 """
+
 from __future__ import annotations
 
 import uuid
@@ -35,20 +36,21 @@ from app.models import (
 
 # VAT rates by treatment code (HMRC standard)
 VAT_RATES: dict[str, Decimal] = {
-    "T0": Decimal("0.20"),   # standard 20%
-    "T1": Decimal("0.05"),   # reduced 5%
-    "T2": Decimal("0"),      # exempt
-    "T4": Decimal("0"),      # zero-rated sales
-    "T7": Decimal("0"),      # zero-rated purchases
-    "T9": Decimal("0"),      # outside scope
+    "T0": Decimal("0.20"),  # standard 20%
+    "T1": Decimal("0.05"),  # reduced 5%
+    "T2": Decimal("0"),  # exempt
+    "T4": Decimal("0"),  # zero-rated sales
+    "T7": Decimal("0"),  # zero-rated purchases
+    "T9": Decimal("0"),  # outside scope
 }
 
 # VAT account codes in UK standard CoA
-VAT_OUTPUT_ACCOUNT_CODE = "2001"   # VAT Payable
-VAT_INPUT_ACCOUNT_CODE = "1101"    # VAT Receivable
+VAT_OUTPUT_ACCOUNT_CODE = "2001"  # VAT Payable
+VAT_INPUT_ACCOUNT_CODE = "1101"  # VAT Receivable
 
 
 # ─────────────────────────────────────────────────── Pydantic schemas ──────────
+
 
 class JournalLineCreate(BaseModel):
     account_id: uuid.UUID
@@ -118,6 +120,7 @@ class JournalRead(BaseModel):
 
 # ─────────────────────────────────────────────────── Service ───────────────────
 
+
 class LedgerService:
     """Double-entry journal engine.
 
@@ -186,7 +189,9 @@ class LedgerService:
             vat_amount = (base * rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             # Look up the VAT account
             is_debit_side = ln.debit_amount > 0
-            vat_code = VAT_INPUT_ACCOUNT_CODE if is_debit_side else VAT_OUTPUT_ACCOUNT_CODE
+            vat_code = (
+                VAT_INPUT_ACCOUNT_CODE if is_debit_side else VAT_OUTPUT_ACCOUNT_CODE
+            )
             vat_account = await self._db.scalar(
                 select(ChartOfAccount).where(
                     ChartOfAccount.tenant_id == self._tenant_id,
@@ -262,7 +267,9 @@ class LedgerService:
     async def post_journal(self, journal_id: uuid.UUID, from_ip: str = "") -> Journal:
         journal = await self._get_journal_with_lines(journal_id)
         if journal.status != "draft":
-            raise ValueError(f"Journal {journal_id} is already in status '{journal.status}'.")
+            raise ValueError(
+                f"Journal {journal_id} is already in status '{journal.status}'."
+            )
         await self._assert_period_open(journal.period_id)
 
         # Final balance check against persisted lines
@@ -298,7 +305,7 @@ class LedgerService:
         reversal_lines = [
             JournalLineCreate(
                 account_id=ln.account_id,
-                debit_amount=ln.credit_amount,   # swap Dr/Cr
+                debit_amount=ln.credit_amount,  # swap Dr/Cr
                 credit_amount=ln.debit_amount,
                 currency_code=ln.currency_code,
                 description=f"Reversal: {ln.description or ''}",
@@ -332,7 +339,8 @@ class LedgerService:
     # ──────────────────────────────────────── recurring ────────────────────────
 
     async def create_recurring_template(
-        self, payload: RecurringTemplateCreate,
+        self,
+        payload: RecurringTemplateCreate,
     ) -> RecurringJournalTemplate:
         tmpl = RecurringJournalTemplate(
             tenant_id=self._tenant_id,
@@ -342,14 +350,18 @@ class LedgerService:
             day_of_month=payload.day_of_month,
             start_date=payload.start_date,
             end_date=payload.end_date,
-            template_lines=[ln.model_dump(mode="json") for ln in payload.template_lines],
+            template_lines=[
+                ln.model_dump(mode="json") for ln in payload.template_lines
+            ],
             created_by_user_id=self._user_id,
         )
         self._db.add(tmpl)
         await self._db.flush()
         return tmpl
 
-    async def run_due_recurring(self, period_id: uuid.UUID, as_of: date) -> list[Journal]:
+    async def run_due_recurring(
+        self, period_id: uuid.UUID, as_of: date
+    ) -> list[Journal]:
         """Materialise all active recurring templates due on or before ``as_of``."""
         templates = await self._db.scalars(
             select(RecurringJournalTemplate).where(

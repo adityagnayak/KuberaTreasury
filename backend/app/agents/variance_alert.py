@@ -20,9 +20,15 @@ async def run(db: AsyncSession, tenant_id: uuid.UUID) -> dict:
         "unmatched_intercompany_days": 0,
     }
 
-    await log_tool_call(db, execution_id, tenant_id, AGENT_NAME, "get_actual_vs_forecast", {}, checks)
-    await log_tool_call(db, execution_id, tenant_id, AGENT_NAME, "get_position_movements", {}, checks)
-    await log_tool_call(db, execution_id, tenant_id, AGENT_NAME, "get_large_transactions", {}, checks)
+    await log_tool_call(
+        db, execution_id, tenant_id, AGENT_NAME, "get_actual_vs_forecast", {}, checks
+    )
+    await log_tool_call(
+        db, execution_id, tenant_id, AGENT_NAME, "get_position_movements", {}, checks
+    )
+    await log_tool_call(
+        db, execution_id, tenant_id, AGENT_NAME, "get_large_transactions", {}, checks
+    )
 
     triggered = (
         checks["single_movement_pct"] > 10

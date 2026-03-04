@@ -1,4 +1,5 @@
 """Ledger journal — FastAPI v1 router."""
+
 from __future__ import annotations
 
 import uuid
@@ -17,8 +18,14 @@ from app.services.ledger_service import (
 router = APIRouter(prefix="/ledger", tags=["Ledger"])
 
 
-def _svc(db: DBSession, user: AuthUser, x_forwarded_for: Annotated[str | None, Header()] = None) -> LedgerService:
-    return LedgerService(db, user.tenant_id, user.user_id, user_ip=x_forwarded_for or "")
+def _svc(
+    db: DBSession,
+    user: AuthUser,
+    x_forwarded_for: Annotated[str | None, Header()] = None,
+) -> LedgerService:
+    return LedgerService(
+        db, user.tenant_id, user.user_id, user_ip=x_forwarded_for or ""
+    )
 
 
 @router.post(
@@ -81,7 +88,11 @@ async def list_journals(
     return [JournalRead.model_validate(j) for j in journals]
 
 
-@router.get("/journals/{journal_id}", response_model=JournalRead, summary="Get journal with lines")
+@router.get(
+    "/journals/{journal_id}",
+    response_model=JournalRead,
+    summary="Get journal with lines",
+)
 async def get_journal(
     journal_id: uuid.UUID,
     svc: Annotated[LedgerService, Depends(_svc)],
@@ -90,6 +101,7 @@ async def get_journal(
 
 
 # ── Recurring templates ────────────────────────────────────────────────────────
+
 
 @router.post(
     "/recurring-templates",
@@ -114,5 +126,9 @@ async def run_recurring(
     svc: Annotated[LedgerService, Depends(_svc)],
 ) -> dict:
     from datetime import date as _date
+
     journals = await svc.run_due_recurring(period_id, _date.fromisoformat(as_of))
-    return {"journals_created": len(journals), "journal_ids": [str(j.journal_id) for j in journals]}
+    return {
+        "journals_created": len(journals),
+        "journal_ids": [str(j.journal_id) for j in journals],
+    }

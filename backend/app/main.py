@@ -4,6 +4,7 @@ Security headers (OWASP), CORS, JWT bearer scheme, per-module routers.
 The exception handler translates every ``KuberaError`` subclass to its
 HTTP status code and RFC 7807-style JSON body.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -13,9 +14,12 @@ from jose import JWTError, jwt
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-
 from app.core.config import settings
-from app.core.database import _get_session_factory, reset_tenant_context, set_tenant_context
+from app.core.database import (
+    _get_session_factory,
+    reset_tenant_context,
+    set_tenant_context,
+)
 from app.core.exceptions import KuberaError
 from app.api.v1.auth import router as auth_router
 from app.api.v1.users import router as users_router
@@ -27,25 +31,8 @@ from app.api.v1.intercompany import router as ic_router
 from app.api.v1.accounting_period import router as period_router
 from app.api.v1.treasury import router as treasury_router
 from app.api.v1.payments_compliance import router as payments_router
+from app.core.middleware import SecurityHeadersMiddleware
 from app.services.auth_service import AuthService
-
-
-# ─────────────────────────────────────────────────── Security headers ──────────
-
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):  # type: ignore[override]
-        response = await call_next(request)
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Strict-Transport-Security"] = (
-            "max-age=31536000; includeSubDomains; preload"
-        )
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; frame-ancestors 'none';"
-        )
-        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-        return response
 
 
 class TenantIsolationMiddleware(BaseHTTPMiddleware):
@@ -60,7 +47,9 @@ class TenantIsolationMiddleware(BaseHTTPMiddleware):
         ctx_token = set_tenant_context(None)
         if token:
             try:
-                payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+                payload = jwt.decode(
+                    token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
+                )
                 tenant_id = payload.get("tenant_id")
                 user_id = payload.get("sub")
                 if payload.get("type") == "access" and tenant_id and user_id:
@@ -79,7 +68,12 @@ class TenantIsolationMiddleware(BaseHTTPMiddleware):
 class IpAllowlistMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
         path = request.url.path
-        if path in {"/health"} or path.startswith("/docs") or path.startswith("/redoc") or path.startswith("/openapi"):
+        if (
+            path in {"/health"}
+            or path.startswith("/docs")
+            or path.startswith("/redoc")
+            or path.startswith("/openapi")
+        ):
             return await call_next(request)
 
         tenant_id = getattr(request.state, "tenant_id", None)
@@ -97,6 +91,7 @@ class IpAllowlistMiddleware(BaseHTTPMiddleware):
 
 
 # ─────────────────────────────────────────────────── Application factory ───────
+
 
 def create_app() -> FastAPI:
     app = FastAPI(

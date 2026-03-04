@@ -10,28 +10,36 @@ from app.core.database import _get_session_factory
 
 
 async def run_daily_briefing() -> None:
-    tenant_id = uuid.UUID(os.getenv("AGENT_TENANT_ID", "6dfc32c5-8bef-48bd-9753-c8b8aa2dc676"))
+    tenant_id = uuid.UUID(
+        os.getenv("AGENT_TENANT_ID", "6dfc32c5-8bef-48bd-9753-c8b8aa2dc676")
+    )
     async with _get_session_factory() as db:
         await daily_briefing.run(db, tenant_id, date.today())
         await db.commit()
 
 
 async def run_payment_prep(cutoff: str) -> None:
-    tenant_id = uuid.UUID(os.getenv("AGENT_TENANT_ID", "6dfc32c5-8bef-48bd-9753-c8b8aa2dc676"))
+    tenant_id = uuid.UUID(
+        os.getenv("AGENT_TENANT_ID", "6dfc32c5-8bef-48bd-9753-c8b8aa2dc676")
+    )
     async with _get_session_factory() as db:
         await payment_prep.run(db, tenant_id, cutoff)
         await db.commit()
 
 
 async def run_variance_alert() -> None:
-    tenant_id = uuid.UUID(os.getenv("AGENT_TENANT_ID", "6dfc32c5-8bef-48bd-9753-c8b8aa2dc676"))
+    tenant_id = uuid.UUID(
+        os.getenv("AGENT_TENANT_ID", "6dfc32c5-8bef-48bd-9753-c8b8aa2dc676")
+    )
     async with _get_session_factory() as db:
         await variance_alert.run(db, tenant_id)
         await db.commit()
 
 
 async def run_hmrc_deadlines() -> None:
-    tenant_id = uuid.UUID(os.getenv("AGENT_TENANT_ID", "6dfc32c5-8bef-48bd-9753-c8b8aa2dc676"))
+    tenant_id = uuid.UUID(
+        os.getenv("AGENT_TENANT_ID", "6dfc32c5-8bef-48bd-9753-c8b8aa2dc676")
+    )
     async with _get_session_factory() as db:
         await hmrc_deadlines.run(db, tenant_id, date.today())
         await db.commit()

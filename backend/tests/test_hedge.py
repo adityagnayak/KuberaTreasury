@@ -1,4 +1,5 @@
 """Tests for IFRS 9 Hedge Accounting — designation, effectiveness, OCI, de-designation."""
+
 from __future__ import annotations
 
 import uuid
@@ -42,8 +43,11 @@ def _designation_payload(
 
 # ─────────────────────────────────────────────── designation ───────────────────
 
+
 @pytest.mark.asyncio
-async def test_designate_creates_hedge(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_designate_creates_hedge(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     svc = _svc(db, tenant_id, user_id)
     hd = await svc.designate(_designation_payload())
     assert hd.is_active is True
@@ -51,7 +55,9 @@ async def test_designate_creates_hedge(db: AsyncSession, tenant: Tenant, tenant_
 
 
 @pytest.mark.asyncio
-async def test_designation_embeds_tax_note(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_designation_embeds_tax_note(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     svc = _svc(db, tenant_id, user_id)
     hd = await svc.designate(_designation_payload())
     assert "corporation tax" in hd.tax_note.lower()
@@ -66,14 +72,16 @@ async def test_hedge_ratio_must_be_between_0_and_1():
             hedging_instrument_description="FX Forward GBP/USD 1M",
             hedged_item_description="USD payable invoice",
             risk_component="FX risk USD",
-            hedge_ratio=Decimal("1.5"),   # invalid: > 1
+            hedge_ratio=Decimal("1.5"),  # invalid: > 1
             designation_date=date(2026, 1, 1),
             prospective_method="dollar_offset",
         )
 
 
 @pytest.mark.asyncio
-async def test_list_designations_active_only(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_list_designations_active_only(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     svc = _svc(db, tenant_id, user_id)
     active = await svc.designate(_designation_payload())
     inactive = await svc.designate(_designation_payload())
@@ -92,6 +100,7 @@ async def test_list_designations_active_only(db: AsyncSession, tenant: Tenant, t
 
 
 # ─────────────────────────────────────────────── effectiveness ─────────────────
+
 
 @pytest.mark.asyncio
 async def test_retrospective_pass_at_100_percent(
@@ -168,7 +177,10 @@ async def test_retrospective_fails_below_80_percent(
                 hedged_item_fair_value_change=Decimal("-1000"),
             ),
         )
-    assert "qualifying range" in str(exc_info.value).lower() or "effectiveness" in str(exc_info.value).lower()
+    assert (
+        "qualifying range" in str(exc_info.value).lower()
+        or "effectiveness" in str(exc_info.value).lower()
+    )
 
 
 @pytest.mark.asyncio
@@ -203,17 +215,22 @@ async def test_prospective_test_always_passes(
             period_id=open_period.period_id,
             test_type="prospective",
             method="dollar_offset",
-            instrument_fair_value_change=Decimal("600"),  # 60% — would fail retrospective
+            instrument_fair_value_change=Decimal(
+                "600"
+            ),  # 60% — would fail retrospective
             hedged_item_fair_value_change=Decimal("-1000"),
         ),
     )
-    assert result.passed is True   # prospective is always qualitative
+    assert result.passed is True  # prospective is always qualitative
 
 
 # ─────────────────────────────────────────────── de-designation ────────────────
 
+
 @pytest.mark.asyncio
-async def test_de_designate_sets_inactive(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_de_designate_sets_inactive(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     svc = _svc(db, tenant_id, user_id)
     hd = await svc.designate(_designation_payload())
     updated = await svc.de_designate(
@@ -229,7 +246,9 @@ async def test_de_designate_sets_inactive(db: AsyncSession, tenant: Tenant, tena
 
 
 @pytest.mark.asyncio
-async def test_de_designate_twice_raises(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_de_designate_twice_raises(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     svc = _svc(db, tenant_id, user_id)
     hd = await svc.designate(_designation_payload())
     payload = DeDesignationUpdate(
@@ -244,8 +263,11 @@ async def test_de_designate_twice_raises(db: AsyncSession, tenant: Tenant, tenan
 
 # ─────────────────────────────────────────────── hedge register ────────────────
 
+
 @pytest.mark.asyncio
-async def test_hedge_register_returns_list(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_hedge_register_returns_list(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     svc = _svc(db, tenant_id, user_id)
     await svc.designate(_designation_payload("fair_value"))
     register = await svc.get_hedge_register()

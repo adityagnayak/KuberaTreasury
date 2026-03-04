@@ -11,6 +11,7 @@ Satisfies IFRS 9 §6.2–6.5:
 - Tax note embedded in every designation: hedge accounting does NOT change corporation
   tax position (HMRC CT Manual CG53000); tax follows the underlying economic transaction.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -43,6 +44,7 @@ TAX_NOTE = (
 
 # ─────────────────────────────────────────────────── Pydantic schemas ──────────
 
+
 class HedgeDesignationCreate(BaseModel):
     hedge_reference: str = Field(..., min_length=1, max_length=60)
     hedge_type: Literal["fair_value", "cash_flow", "net_investment"]
@@ -65,14 +67,16 @@ class EffectivenessTestCreate(BaseModel):
     @model_validator(mode="after")
     def _validate_hedged_item_nonzero(self) -> "EffectivenessTestCreate":
         if self.hedged_item_fair_value_change == 0:
-            raise ValueError("hedged_item_fair_value_change cannot be zero (division by zero in ratio).")
+            raise ValueError(
+                "hedged_item_fair_value_change cannot be zero (division by zero in ratio)."
+            )
         return self
 
 
 class OciReclassificationCreate(BaseModel):
     period_id: uuid.UUID
-    oci_account_id: uuid.UUID        # hedging reserve OCI account
-    pnl_account_id: uuid.UUID        # income/expense account to reclassify into
+    oci_account_id: uuid.UUID  # hedging reserve OCI account
+    pnl_account_id: uuid.UUID  # income/expense account to reclassify into
     amount_reclassified: Decimal = Field(..., ne=0)
     currency_code: str = Field(default="GBP", min_length=3, max_length=3)
     trigger_description: str = Field(..., min_length=5, max_length=500)
@@ -124,6 +128,7 @@ class EffectivenessTestRead(BaseModel):
 
 # ─────────────────────────────────────────────────── Service ───────────────────
 
+
 class HedgeAccountingService:
     """IFRS 9 hedge accounting lifecycle manager.
 
@@ -169,7 +174,9 @@ class HedgeAccountingService:
         return hd
 
     async def de_designate(
-        self, hedge_id: uuid.UUID, payload: DeDesignationUpdate,
+        self,
+        hedge_id: uuid.UUID,
+        payload: DeDesignationUpdate,
     ) -> HedgeDesignation:
         hd = await self._get_hedge(hedge_id)
         if not hd.is_active:
@@ -254,7 +261,9 @@ class HedgeAccountingService:
             oci_dr, oci_cr = Decimal("0"), abs(amount)
             pnl_dr, pnl_cr = abs(amount), Decimal("0")
 
-        ledger_svc = LedgerService(self._db, self._tenant_id, self._user_id, self._user_ip)
+        ledger_svc = LedgerService(
+            self._db, self._tenant_id, self._user_id, self._user_ip
+        )
         journal = await ledger_svc.create_journal(
             JournalCreate(
                 period_id=payload.period_id,
@@ -300,7 +309,9 @@ class HedgeAccountingService:
     async def get_designation(self, hedge_id: uuid.UUID) -> HedgeDesignation:
         return await self._get_hedge(hedge_id)
 
-    async def list_designations(self, active_only: bool = True) -> list[HedgeDesignation]:
+    async def list_designations(
+        self, active_only: bool = True
+    ) -> list[HedgeDesignation]:
         stmt = select(HedgeDesignation).where(
             HedgeDesignation.tenant_id == self._tenant_id
         )
@@ -310,13 +321,16 @@ class HedgeAccountingService:
         return list(result.all())
 
     async def list_effectiveness_tests(
-        self, hedge_id: uuid.UUID,
+        self,
+        hedge_id: uuid.UUID,
     ) -> list[HedgeEffectivenessTest]:
         result = await self._db.scalars(
-            select(HedgeEffectivenessTest).where(
+            select(HedgeEffectivenessTest)
+            .where(
                 HedgeEffectivenessTest.tenant_id == self._tenant_id,
                 HedgeEffectivenessTest.hedge_id == hedge_id,
-            ).order_by(HedgeEffectivenessTest.tested_at)
+            )
+            .order_by(HedgeEffectivenessTest.tested_at)
         )
         return list(result.all())
 
@@ -336,7 +350,11 @@ class HedgeAccountingService:
                     "hedge_ratio": str(h.hedge_ratio),
                     "designation_date": h.designation_date.isoformat(),
                     "is_active": h.is_active,
-                    "de_designation_date": h.de_designation_date.isoformat() if h.de_designation_date else None,
+                    "de_designation_date": (
+                        h.de_designation_date.isoformat()
+                        if h.de_designation_date
+                        else None
+                    ),
                     "de_designation_reason": h.de_designation_reason,
                     "cumulative_oci_treatment": h.cumulative_oci_treatment_on_dedesignation,
                     "tax_note": h.tax_note,

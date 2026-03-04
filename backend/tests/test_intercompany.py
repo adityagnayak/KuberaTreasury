@@ -1,4 +1,5 @@
 """Tests for Intercompany service — TP validation boundaries, CIR thresholds, ageing."""
+
 from __future__ import annotations
 
 import uuid
@@ -42,8 +43,11 @@ def _tx_payload(
 
 # ─────────────────────────────────────────────── TP validation ─────────────────
 
+
 @pytest.mark.asyncio
-async def test_tp_within_tolerance_passes(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_tp_within_tolerance_passes(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     """Contracted rate within ±150bps of benchmark should not raise."""
     svc = _svc(db, tenant_id, user_id)
     tx = await svc.create_transaction(
@@ -54,7 +58,9 @@ async def test_tp_within_tolerance_passes(db: AsyncSession, tenant: Tenant, tena
 
 
 @pytest.mark.asyncio
-async def test_tp_exactly_at_150bps_passes(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_tp_exactly_at_150bps_passes(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     """Variance of exactly 150bps is within tolerance (≤ not <)."""
     svc = _svc(db, tenant_id, user_id)
     tx = await svc.create_transaction(
@@ -64,7 +70,9 @@ async def test_tp_exactly_at_150bps_passes(db: AsyncSession, tenant: Tenant, ten
 
 
 @pytest.mark.asyncio
-async def test_tp_above_150bps_raises(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_tp_above_150bps_raises(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     """Variance of 151bps must raise TransferPricingError (TIOPA 2010 s.147)."""
     svc = _svc(db, tenant_id, user_id)
     with pytest.raises(TransferPricingError) as exc_info:
@@ -75,7 +83,9 @@ async def test_tp_above_150bps_raises(db: AsyncSession, tenant: Tenant, tenant_i
 
 
 @pytest.mark.asyncio
-async def test_tp_no_rates_bypasses_validation(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_tp_no_rates_bypasses_validation(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     """Transaction with no rates should be created without TP check."""
     svc = _svc(db, tenant_id, user_id)
     tx = await svc.create_transaction(_tx_payload())
@@ -84,6 +94,7 @@ async def test_tp_no_rates_bypasses_validation(db: AsyncSession, tenant: Tenant,
 
 
 # ─────────────────────────────────────────────── matching ──────────────────────
+
 
 @pytest.mark.asyncio
 async def test_match_transaction(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
@@ -108,8 +119,11 @@ async def test_list_unmatched(db: AsyncSession, tenant: Tenant, tenant_id, user_
 
 # ─────────────────────────────────────────────── ageing ────────────────────────
 
+
 @pytest.mark.asyncio
-async def test_ageing_buckets_correctly(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_ageing_buckets_correctly(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     svc = _svc(db, tenant_id, user_id)
     ref = date(2026, 6, 1)
 
@@ -129,8 +143,11 @@ async def test_ageing_buckets_correctly(db: AsyncSession, tenant: Tenant, tenant
 
 # ─────────────────────────────────────────────── CIR ──────────────────────────
 
+
 @pytest.mark.asyncio
-async def test_cir_below_alert_threshold(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_cir_below_alert_threshold(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     svc = _svc(db, tenant_id, user_id)
     summary = await svc.calculate_cir(
         period_start=date(2026, 1, 1),
@@ -161,7 +178,9 @@ async def test_cir_alert_at_1_5m(db: AsyncSession, tenant: Tenant, tenant_id, us
 
 
 @pytest.mark.asyncio
-async def test_cir_hard_flag_at_2m(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_cir_hard_flag_at_2m(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     svc = _svc(db, tenant_id, user_id)
     summary = await svc.calculate_cir(
         period_start=date(2026, 1, 1),
@@ -176,7 +195,9 @@ async def test_cir_hard_flag_at_2m(db: AsyncSession, tenant: Tenant, tenant_id, 
 
 
 @pytest.mark.asyncio
-async def test_cir_restriction_id_is_uuid(db: AsyncSession, tenant: Tenant, tenant_id, user_id):
+async def test_cir_restriction_id_is_uuid(
+    db: AsyncSession, tenant: Tenant, tenant_id, user_id
+):
     svc = _svc(db, tenant_id, user_id)
     summary = await svc.calculate_cir(
         period_start=date(2026, 1, 1),

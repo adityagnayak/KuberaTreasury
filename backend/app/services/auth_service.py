@@ -29,6 +29,7 @@ from app.models import (
     UserRole,
 )
 
+
 class LoginRequest(BaseModel):
     tenant_id: uuid.UUID
     email: EmailStr
@@ -54,8 +55,11 @@ class ChangePasswordRequest(BaseModel):
 
 
 class ErasureResponse(BaseModel):
+    """Response payload for GDPR / UK-GDPR right-to-erasure requests."""
+
+    erased: bool = True
     user_id: uuid.UUID
-    anonymised_count: int
+    erased_at: datetime
 
 
 class AuthService:
@@ -67,11 +71,15 @@ class AuthService:
 
     def _hash_password(self, password: str) -> str:
         rounds = min(max(settings.BCRYPT_ROUNDS, 4), 31)
-        return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=rounds)).decode("utf-8")
+        return bcrypt.hashpw(
+            password.encode("utf-8"), bcrypt.gensalt(rounds=rounds)
+        ).decode("utf-8")
 
     def _verify_password(self, password: str, password_hash: str) -> bool:
         try:
-            return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+            return bcrypt.checkpw(
+                password.encode("utf-8"), password_hash.encode("utf-8")
+            )
         except ValueError:
             return False
 
@@ -79,7 +87,9 @@ class AuthService:
         payload = claims.copy()
         payload["exp"] = self._utcnow() + expires_delta
         payload["iat"] = self._utcnow()
-        return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+        return jwt.encode(
+            payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM
+        )
 
     def _verify_password_policy(self, new_password: str) -> None:
         if len(new_password) < 12:
@@ -89,9 +99,13 @@ class AuthService:
         has_digit = any(ch.isdigit() for ch in new_password)
         has_special = any(not ch.isalnum() for ch in new_password)
         if not all([has_upper, has_lower, has_digit, has_special]):
-            raise ValueError("Password must include upper, lower, number, and special character")
+            raise ValueError(
+                "Password must include upper, lower, number, and special character"
+            )
 
-    async def _roles_for_user(self, db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID) -> list[str]:
+    async def _roles_for_user(
+        self, db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
+    ) -> list[str]:
         stmt = (
             select(Role.role_name)
             .join(UserRole, UserRole.role_id == Role.role_id)
@@ -100,9 +114,13 @@ class AuthService:
         rows = await db.execute(stmt)
         return [r[0] for r in rows.all()]
 
-    async def _get_security_settings(self, db: AsyncSession, tenant_id: uuid.UUID) -> TenantSecuritySetting | None:
+    async def _get_security_settings(
+        self, db: AsyncSession, tenant_id: uuid.UUID
+    ) -> TenantSecuritySetting | None:
         res = await db.execute(
-            select(TenantSecuritySetting).where(TenantSecuritySetting.tenant_id == tenant_id)
+            select(TenantSecuritySetting).where(
+                TenantSecuritySetting.tenant_id == tenant_id
+            )
         )
         return res.scalar_one_or_none()
 
@@ -214,8 +232,18 @@ class AuthService:
             )
         ).scalar_one_or_none()
 
-        if user is None or not self._verify_password(payload.password, user.password_hash):
-            await self._log_attempt(db, payload.tenant_id, payload.email, False, ip, user_agent, user.user_id if user else None)
+        if user is None or not self._verify_password(
+            payload.password, user.password_hash
+        ):
+            await self._log_attempt(
+                db,
+                payload.tenant_id,
+                payload.email,
+                False,
+                ip,
+                user_agent,
+                user.user_id if user else None,
+            )
             total_failed = await self._count_recent_failed_attempts(
                 db,
                 payload.tenant_id,
@@ -241,26 +269,50 @@ class AuthService:
             or (sec.mfa_required_for_all_users if sec else False)
         )
         if mfa_required:
-            if not await self._validate_mfa(db, payload.tenant_id, user.user_id, payload.totp_code, payload.backup_code):
-                await self._log_attempt(db, payload.tenant_id, payload.email, False, ip, user_agent, user.user_id)
+            if not await self._validate_mfa(
+                db,
+                payload.tenant_id,
+                user.user_id,
+                payload.totp_code,
+                payload.backup_code,
+            ):
+                await self._log_attempt(
+                    db,
+                    payload.tenant_id,
+                    payload.email,
+                    False,
+                    ip,
+                    user_agent,
+                    user.user_id,
+                )
                 raise ValueError("MFA required")
 
-        await self._log_attempt(db, payload.tenant_id, payload.email, True, ip, user_agent, user.user_id)
+        await self._log_attempt(
+            db, payload.tenant_id, payload.email, True, ip, user_agent, user.user_id
+        )
         user.last_login_at = self._utcnow()
 
-        session_limit = sec.concurrent_session_limit if sec else settings.DEFAULT_CONCURRENT_SESSION_LIMIT
+        session_limit = (
+            sec.concurrent_session_limit
+            if sec
+            else settings.DEFAULT_CONCURRENT_SESSION_LIMIT
+        )
         current_sessions = (
-            await db.execute(
-                select(AuthSession)
-                .where(
-                    AuthSession.tenant_id == payload.tenant_id,
-                    AuthSession.user_id == user.user_id,
-                    AuthSession.revoked_at.is_(None),
-                    AuthSession.expires_at > self._utcnow(),
+            (
+                await db.execute(
+                    select(AuthSession)
+                    .where(
+                        AuthSession.tenant_id == payload.tenant_id,
+                        AuthSession.user_id == user.user_id,
+                        AuthSession.revoked_at.is_(None),
+                        AuthSession.expires_at > self._utcnow(),
+                    )
+                    .order_by(AuthSession.issued_at.asc())
                 )
-                .order_by(AuthSession.issued_at.asc())
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         if len(current_sessions) >= session_limit:
             revoke_count = len(current_sessions) - session_limit + 1
@@ -303,19 +355,32 @@ class AuthService:
                 jwt_id=jti_refresh,
                 ip_address=ip,
                 user_agent=user_agent,
-                expires_at=self._utcnow() + timedelta(days=settings.JWT_REFRESH_TOKEN_TTL_DAYS),
+                expires_at=self._utcnow()
+                + timedelta(days=settings.JWT_REFRESH_TOKEN_TTL_DAYS),
             )
         )
 
         return (
-            TokenResponse(access_token=access_token, expires_in=settings.JWT_ACCESS_TOKEN_TTL_MINUTES * 60),
+            TokenResponse(
+                access_token=access_token,
+                expires_in=settings.JWT_ACCESS_TOKEN_TTL_MINUTES * 60,
+            ),
             refresh_token,
-            {"roles": roles, "tenant_id": str(payload.tenant_id), "user_id": str(user.user_id), "session_id": str(session_id)},
+            {
+                "roles": roles,
+                "tenant_id": str(payload.tenant_id),
+                "user_id": str(user.user_id),
+                "session_id": str(session_id),
+            },
         )
 
-    async def setup_mfa(self, db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, email: str) -> MfaSetupResponse:
+    async def setup_mfa(
+        self, db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, email: str
+    ) -> MfaSetupResponse:
         secret = pyotp.random_base32()
-        uri = pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name="KuberaTreasury")
+        uri = pyotp.TOTP(secret).provisioning_uri(
+            name=email, issuer_name="KuberaTreasury"
+        )
 
         factor = (
             await db.execute(
@@ -341,7 +406,9 @@ class AuthService:
 
         await db.execute(
             update(MfaBackupCode)
-            .where(MfaBackupCode.tenant_id == tenant_id, MfaBackupCode.user_id == user_id)
+            .where(
+                MfaBackupCode.tenant_id == tenant_id, MfaBackupCode.user_id == user_id
+            )
             .values(used_at=self._utcnow())
         )
 
@@ -387,7 +454,9 @@ class AuthService:
             factor.is_enabled = True
         return False
 
-    async def refresh_access_token(self, db: AsyncSession, refresh_payload: dict, ip: str | None, ua: str | None) -> TokenResponse:
+    async def refresh_access_token(
+        self, db: AsyncSession, refresh_payload: dict, ip: str | None, ua: str | None
+    ) -> TokenResponse:
         if refresh_payload.get("type") != "refresh":
             raise ValueError("Invalid refresh token")
 
@@ -412,8 +481,14 @@ class AuthService:
             raise ValueError("Session revoked or expired")
 
         sec = await self._get_security_settings(db, tenant_id)
-        inactivity = sec.inactivity_timeout_minutes if sec else settings.DEFAULT_INACTIVITY_TIMEOUT_MINUTES
-        if session.issued_at and (self._utcnow() - session.issued_at) > timedelta(minutes=inactivity):
+        inactivity = (
+            sec.inactivity_timeout_minutes
+            if sec
+            else settings.DEFAULT_INACTIVITY_TIMEOUT_MINUTES
+        )
+        if session.issued_at and (self._utcnow() - session.issued_at) > timedelta(
+            minutes=inactivity
+        ):
             session.revoked_at = self._utcnow()
             raise ValueError("Session inactive timeout")
 
@@ -432,18 +507,30 @@ class AuthService:
             },
             timedelta(minutes=settings.JWT_ACCESS_TOKEN_TTL_MINUTES),
         )
-        return TokenResponse(access_token=token, expires_in=settings.JWT_ACCESS_TOKEN_TTL_MINUTES * 60)
+        return TokenResponse(
+            access_token=token, expires_in=settings.JWT_ACCESS_TOKEN_TTL_MINUTES * 60
+        )
 
-    async def revoke_all_sessions(self, db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, actor_id: uuid.UUID) -> int:
+    async def revoke_all_sessions(
+        self,
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID,
+        actor_id: uuid.UUID,
+    ) -> int:
         sessions = (
-            await db.execute(
-                select(AuthSession).where(
-                    AuthSession.tenant_id == tenant_id,
-                    AuthSession.user_id == user_id,
-                    AuthSession.revoked_at.is_(None),
+            (
+                await db.execute(
+                    select(AuthSession).where(
+                        AuthSession.tenant_id == tenant_id,
+                        AuthSession.user_id == user_id,
+                        AuthSession.revoked_at.is_(None),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         now = self._utcnow()
         for s in sessions:
             s.revoked_at = now
@@ -457,9 +544,17 @@ class AuthService:
         )
         return len(sessions)
 
-    async def change_password(self, db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, payload: ChangePasswordRequest) -> None:
+    async def change_password(
+        self,
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID,
+        payload: ChangePasswordRequest,
+    ) -> None:
         user = (
-            await db.execute(select(User).where(User.tenant_id == tenant_id, User.user_id == user_id))
+            await db.execute(
+                select(User).where(User.tenant_id == tenant_id, User.user_id == user_id)
+            )
         ).scalar_one_or_none()
         if user is None:
             raise ValueError("User not found")
@@ -470,19 +565,33 @@ class AuthService:
         self._verify_password_policy(payload.new_password)
 
         history_rows = (
-            await db.execute(
-                select(PasswordHistory)
-                .where(PasswordHistory.tenant_id == tenant_id, PasswordHistory.user_id == user_id)
-                .order_by(PasswordHistory.created_at.desc())
-                .limit(12)
+            (
+                await db.execute(
+                    select(PasswordHistory)
+                    .where(
+                        PasswordHistory.tenant_id == tenant_id,
+                        PasswordHistory.user_id == user_id,
+                    )
+                    .order_by(PasswordHistory.created_at.desc())
+                    .limit(12)
+                )
             )
-        ).scalars().all()
-        if any(self._verify_password(payload.new_password, h.password_hash) for h in history_rows):
+            .scalars()
+            .all()
+        )
+        if any(
+            self._verify_password(payload.new_password, h.password_hash)
+            for h in history_rows
+        ):
             raise ValueError("Cannot reuse last 12 passwords")
 
         new_hash = self._hash_password(payload.new_password)
         user.password_hash = new_hash
-        db.add(PasswordHistory(tenant_id=tenant_id, user_id=user_id, password_hash=new_hash))
+        db.add(
+            PasswordHistory(
+                tenant_id=tenant_id, user_id=user_id, password_hash=new_hash
+            )
+        )
 
     async def erase_personal_data(
         self,
@@ -491,49 +600,71 @@ class AuthService:
         target_user_id: uuid.UUID,
         requested_by: uuid.UUID,
     ) -> ErasureResponse:
-        records = (
-            await db.execute(
-                select(PersonalDataRecord).where(
-                    PersonalDataRecord.tenant_id == tenant_id,
-                    PersonalDataRecord.subject_type == f"user:{target_user_id}",
-                    PersonalDataRecord.erased_at.is_(None),
-                )
-            )
-        ).scalars().all()
+        """GDPR right-to-erasure: null out all PII for *target_user_id*.
 
-        count = 0
+        The ``PersonalDataRecord`` row is **never deleted**.  Ledger records
+        (journals, payments, etc.) are also untouched.  An immutable
+        ``SecurityEvent`` audit record is written regardless of whether a
+        ``PersonalDataRecord`` existed.
+        """
         now = self._utcnow()
-        for record in records:
+
+        result = await db.execute(
+            select(PersonalDataRecord).where(
+                PersonalDataRecord.tenant_id == tenant_id,
+                PersonalDataRecord.user_id == target_user_id,
+                PersonalDataRecord.is_erased.is_(False),
+            )
+        )
+        record: PersonalDataRecord | None = result.scalars().first()
+
+        if record is not None:
             record.full_name = None
             record.email = None
             record.phone = None
-            record.address_line_1 = None
-            record.address_line_2 = None
-            record.city = None
-            record.postcode = None
-            record.country_code = None
+            record.address = None
+            record.is_erased = True
             record.erased_at = now
-            count += 1
+            db.add(record)
 
+        # Immutable audit log — written even when no PII record existed.
         db.add(
             SecurityEvent(
                 tenant_id=tenant_id,
                 actor_user_id=requested_by,
                 event_type="personal_data_erasure",
-                details=f"target_user_id={target_user_id} anonymised_count={count}",
+                details=(
+                    f"target_user_id={target_user_id} "
+                    f"requested_by={requested_by} "
+                    f"record_found={record is not None}"
+                ),
             )
         )
 
-        return ErasureResponse(user_id=target_user_id, anonymised_count=count)
+        return ErasureResponse(
+            erased=True,
+            user_id=target_user_id,
+            erased_at=now,
+        )
 
-    async def is_ip_allowed(self, db: AsyncSession, tenant_id: uuid.UUID, remote_ip: str) -> bool:
+    async def is_ip_allowed(
+        self, db: AsyncSession, tenant_id: uuid.UUID, remote_ip: str
+    ) -> bool:
         sec = await self._get_security_settings(db, tenant_id)
         if sec is None or not sec.ip_allowlist_enforced:
             return True
 
         entries = (
-            await db.execute(select(IpAllowlistEntry).where(IpAllowlistEntry.tenant_id == tenant_id))
-        ).scalars().all()
+            (
+                await db.execute(
+                    select(IpAllowlistEntry).where(
+                        IpAllowlistEntry.tenant_id == tenant_id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
         if not entries:
             return True
 

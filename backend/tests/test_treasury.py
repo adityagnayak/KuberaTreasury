@@ -32,8 +32,23 @@ def test_consolidated_position_and_buckets() -> None:
     res = svc.consolidated_position(
         PositionRequest(
             rows=[
-                PositionRow(entity="UK", bank="BankA", account_id="A1", currency="GBP", balance=Decimal("100"), maturity_days=0),
-                PositionRow(entity="UK", bank="BankB", account_id="A2", currency="USD", balance=Decimal("50"), fx_to_base=Decimal("0.8"), maturity_days=10),
+                PositionRow(
+                    entity="UK",
+                    bank="BankA",
+                    account_id="A1",
+                    currency="GBP",
+                    balance=Decimal("100"),
+                    maturity_days=0,
+                ),
+                PositionRow(
+                    entity="UK",
+                    bank="BankB",
+                    account_id="A2",
+                    currency="USD",
+                    balance=Decimal("50"),
+                    fx_to_base=Decimal("0.8"),
+                    maturity_days=10,
+                ),
             ]
         )
     )
@@ -46,8 +61,18 @@ def test_intraday_sweep_simulation() -> None:
     svc = TreasuryService()
     res = svc.simulate_intraday_sweep(
         SweepSimulationRequest(
-            rows=[PositionRow(entity="UK", bank="BankA", account_id="A1", currency="GBP", balance=Decimal("200"))],
-            proposed_payments=[PaymentQueueItem(account_id="A1", amount_base=Decimal("30"))],
+            rows=[
+                PositionRow(
+                    entity="UK",
+                    bank="BankA",
+                    account_id="A1",
+                    currency="GBP",
+                    balance=Decimal("200"),
+                )
+            ],
+            proposed_payments=[
+                PaymentQueueItem(account_id="A1", amount_base=Decimal("30"))
+            ],
         )
     )
     assert res.before_position == Decimal("200.00")
@@ -70,10 +95,25 @@ def test_available_liquidity_and_alerts() -> None:
                     overdraft_limit=Decimal("100"),
                     overdraft_used=Decimal("85"),
                 ),
-                PositionRow(entity="US", bank="BankA", account_id="A2", currency="GBP", balance=Decimal("120")),
+                PositionRow(
+                    entity="US",
+                    bank="BankA",
+                    account_id="A2",
+                    currency="GBP",
+                    balance=Decimal("120"),
+                ),
             ],
-            facilities=[FacilityRow(facility_name="RCF", bank="BankA", limit_amount=Decimal("1000"), current_drawn=Decimal("950"))],
-            payment_queue=[PaymentQueueItem(account_id="A1", amount_base=Decimal("10"))],
+            facilities=[
+                FacilityRow(
+                    facility_name="RCF",
+                    bank="BankA",
+                    limit_amount=Decimal("1000"),
+                    current_drawn=Decimal("950"),
+                )
+            ],
+            payment_queue=[
+                PaymentQueueItem(account_id="A1", amount_base=Decimal("10"))
+            ],
         )
     )
     assert res.available_liquidity == Decimal("240.00")
@@ -148,9 +188,24 @@ def test_ai_forecast_validation_pipeline_and_hashing() -> None:
             as_of=date(2026, 3, 1),
             horizon_days=30,
             rows=[
-                ForecastRowInput(account_id="ACC-1", forecast_date=date(2026, 3, 10), amount=Decimal("1500000"), confidence=Decimal("0.91")),
-                ForecastRowInput(account_id="ACC-2", forecast_date=date(2026, 5, 10), amount=Decimal("10"), confidence=Decimal("0.50")),
-                ForecastRowInput(account_id="ACC-3", forecast_date=date(2026, 3, 12), amount=Decimal("10"), confidence=Decimal("0.20")),
+                ForecastRowInput(
+                    account_id="ACC-1",
+                    forecast_date=date(2026, 3, 10),
+                    amount=Decimal("1500000"),
+                    confidence=Decimal("0.91"),
+                ),
+                ForecastRowInput(
+                    account_id="ACC-2",
+                    forecast_date=date(2026, 5, 10),
+                    amount=Decimal("10"),
+                    confidence=Decimal("0.50"),
+                ),
+                ForecastRowInput(
+                    account_id="ACC-3",
+                    forecast_date=date(2026, 3, 12),
+                    amount=Decimal("10"),
+                    confidence=Decimal("0.20"),
+                ),
             ],
             prompt="forecast prompt",
             raw_response="forecast response",
@@ -228,7 +283,14 @@ def test_daily_variance_and_weekly_summary() -> None:
     variance = svc.daily_variance_report(
         DailyVarianceRequest(
             as_of=date(2026, 3, 4),
-            rows=[VarianceRow(entity="UK", currency="GBP", forecast=Decimal("100"), actual=Decimal("120"))],
+            rows=[
+                VarianceRow(
+                    entity="UK",
+                    currency="GBP",
+                    forecast=Decimal("100"),
+                    actual=Decimal("120"),
+                )
+            ],
         )
     )
     assert variance.by_entity_currency[0]["variance"] == Decimal("20.00")
@@ -243,7 +305,10 @@ def test_daily_variance_and_weekly_summary() -> None:
             net_flows=Decimal("150"),
             fx_impact=Decimal("20"),
             hmrc_obligations=[],
-            forecast_actual_pairs=[(Decimal("100"), Decimal("120")), (Decimal("50"), Decimal("40"))],
+            forecast_actual_pairs=[
+                (Decimal("100"), Decimal("120")),
+                (Decimal("50"), Decimal("40")),
+            ],
         )
     )
     assert weekly.position_movement == Decimal("200.00")
@@ -260,7 +325,14 @@ def test_daily_and_weekly_exports_return_signed_payloads() -> None:
             tenant_id=tenant_id,
             operator_user_id=user_id,
             as_of=date(2026, 3, 4),
-            rows=[VarianceRow(entity="UK", currency="GBP", forecast=Decimal("100"), actual=Decimal("120"))],
+            rows=[
+                VarianceRow(
+                    entity="UK",
+                    currency="GBP",
+                    forecast=Decimal("100"),
+                    actual=Decimal("120"),
+                )
+            ],
         )
     )
     assert daily_export.report_id
@@ -305,7 +377,10 @@ def test_monthly_board_pack_returns_signed_payload() -> None:
             covenant_headroom=[],
             ifrs9_hedge_register_summary=[],
             ai_forecast_accuracy_metrics={"mape": Decimal("4.2")},
-            transfer_pricing_summary={"cir_status": "ok", "interco_volumes": Decimal("100")},
+            transfer_pricing_summary={
+                "cir_status": "ok",
+                "interco_volumes": Decimal("100"),
+            },
         )
     )
     assert out.report_id
@@ -324,7 +399,14 @@ def test_report_audit_history_order_and_limit() -> None:
             tenant_id=tenant_id,
             operator_user_id=user_id,
             as_of=date(2026, 3, 4),
-            rows=[VarianceRow(entity="UK", currency="GBP", forecast=Decimal("100"), actual=Decimal("120"))],
+            rows=[
+                VarianceRow(
+                    entity="UK",
+                    currency="GBP",
+                    forecast=Decimal("100"),
+                    actual=Decimal("120"),
+                )
+            ],
         )
     )
     svc.export_weekly_summary_report(

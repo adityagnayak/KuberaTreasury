@@ -1,4 +1,5 @@
 """Intercompany — FastAPI v1 router."""
+
 from __future__ import annotations
 
 import uuid
@@ -48,7 +49,9 @@ async def list_transactions(
     transaction_type: str | None = Query(default=None),
     matched: bool | None = Query(default=None),
 ) -> list[IntercompanyTransactionRead]:
-    txs = await svc.list_transactions(transaction_type=transaction_type, matched=matched)
+    txs = await svc.list_transactions(
+        transaction_type=transaction_type, matched=matched
+    )
     return [IntercompanyTransactionRead.model_validate(t) for t in txs]
 
 

@@ -1,9 +1,11 @@
 """Domain exceptions — converted to HTTP responses in middleware."""
+
 from __future__ import annotations
 
 
 class KuberaError(Exception):
     """Base error."""
+
     status_code: int = 500
     detail: str = "Internal error"
 

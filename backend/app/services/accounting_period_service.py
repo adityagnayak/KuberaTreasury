@@ -13,6 +13,7 @@ Satisfies:
   earnings (account 3100) are swept to Retained Earnings B/F (account 3200) via an
   auto-generated and immediately posted 'year_end_rollover' journal, ready for the new year.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -33,6 +34,7 @@ _QIP_MONTHS = [7, 10, 13, 16]
 
 
 # ─────────────────────────────────────────────────── Pydantic schemas ──────────
+
 
 class AccountingPeriodCreate(BaseModel):
     period_name: str = Field(..., min_length=1, max_length=100)
@@ -66,7 +68,7 @@ class ReopenRequest(BaseModel):
 
 class YearEndRolloverRequest(BaseModel):
     period_id: uuid.UUID
-    retained_earnings_account_id: uuid.UUID    # 3100 – Retained Earnings (current year)
+    retained_earnings_account_id: uuid.UUID  # 3100 – Retained Earnings (current year)
     retained_earnings_bf_account_id: uuid.UUID  # 3200 – Retained Earnings B/F
     net_profit_for_year: Decimal
     journal_reference: str
@@ -99,6 +101,7 @@ class CtTaxDates(BaseModel):
 
 
 # ─────────────────────────────────────────────────── Service ───────────────────
+
 
 class AccountingPeriodService:
     """Accounting period lifecycle — open → soft_closed → hard_closed.
@@ -146,9 +149,7 @@ class AccountingPeriodService:
     async def get_period(self, period_id: uuid.UUID) -> AccountingPeriod:
         return await self._get(period_id)
 
-    async def list_periods(
-        self, status: str | None = None
-    ) -> list[AccountingPeriod]:
+    async def list_periods(self, status: str | None = None) -> list[AccountingPeriod]:
         stmt = select(AccountingPeriod).where(
             AccountingPeriod.tenant_id == self._tenant_id
         )
@@ -173,7 +174,9 @@ class AccountingPeriodService:
         return period
 
     async def hard_close(
-        self, period_id: uuid.UUID, request: HardCloseRequest,
+        self,
+        period_id: uuid.UUID,
+        request: HardCloseRequest,
     ) -> AccountingPeriod:
         """Hard-close — requires 'system_admin' role; reason is written to audit field."""
         if not _has_any_role(self._user_roles, ["system_admin"]):
@@ -189,7 +192,9 @@ class AccountingPeriodService:
         return period
 
     async def reopen_period(
-        self, period_id: uuid.UUID, request: ReopenRequest,
+        self,
+        period_id: uuid.UUID,
+        request: ReopenRequest,
     ) -> AccountingPeriod:
         """Reopen hard-closed period — requires 'system_admin'; audit reason mandatory."""
         if not _has_any_role(self._user_roles, ["system_admin"]):
@@ -203,7 +208,8 @@ class AccountingPeriodService:
     # ──────────────────────────────────────── Year-end rollover ────────────────
 
     async def year_end_rollover(
-        self, request: YearEndRolloverRequest,
+        self,
+        request: YearEndRolloverRequest,
     ) -> uuid.UUID:
         """Sweep current-year retained earnings to B/F — posts year_end_rollover journal."""
         period = await self._get(request.period_id)
@@ -255,7 +261,9 @@ class AccountingPeriodService:
                 ),
             ]
 
-        ledger_svc = LedgerService(self._db, self._tenant_id, self._user_id, self._user_ip)
+        ledger_svc = LedgerService(
+            self._db, self._tenant_id, self._user_id, self._user_ip
+        )
         jnl = await ledger_svc.create_journal(
             JournalCreate(
                 period_id=request.period_id,
@@ -272,7 +280,9 @@ class AccountingPeriodService:
     # ──────────────────────────────────────── CT date calculation ──────────────
 
     @staticmethod
-    def compute_ct_dates(period_end: date, is_large_company: bool = False) -> CtTaxDates:
+    def compute_ct_dates(
+        period_end: date, is_large_company: bool = False
+    ) -> CtTaxDates:
         """Return CT600 due date and, if large company, QIP instalment dates.
 
         CT600 due: 9 months + 1 day after period end (s.222(2) TMA 1970 via CTA 2009).
@@ -280,7 +290,9 @@ class AccountingPeriodService:
         (Corporation Tax (Instalment Payments) Regulations 1998 SI 1998/3175).
         """
         ct600, qips = _compute_tax_dates(period_end, large_company=is_large_company)
-        return CtTaxDates(period_end=period_end, ct600_due_date=ct600, qip_due_dates=qips)
+        return CtTaxDates(
+            period_end=period_end, ct600_due_date=ct600, qip_due_dates=qips
+        )
 
     # ──────────────────────────────────────── helpers ──────────────────────────
 
@@ -298,6 +310,7 @@ class AccountingPeriodService:
 
 # ─────────────────────────────────────────────── pure functions ────────────────
 
+
 def _compute_tax_dates(
     period_end: date, large_company: bool = False
 ) -> tuple[date, list[date]]:
@@ -312,6 +325,7 @@ def _compute_tax_dates(
     except ValueError:
         # Handle month-end edge: e.g. 31 Jan + 9 months → Oct 31 → Nov 1
         import calendar
+
         last_day = calendar.monthrange(y, m)[1]
         ct600 = date(y, m, min(period_end.day, last_day)) + timedelta(days=1)
 
@@ -328,6 +342,7 @@ def _compute_tax_dates(
                 qip_dates.append(date(y2, m2, period_start_approx.day))
             except ValueError:
                 import calendar
+
                 last_day = calendar.monthrange(y2, m2)[1]
                 qip_dates.append(date(y2, m2, last_day))
 

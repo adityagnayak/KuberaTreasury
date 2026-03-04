@@ -1,4 +1,5 @@
 """Chart of Accounts — FastAPI v1 router."""
+
 from __future__ import annotations
 
 import uuid
@@ -71,7 +72,9 @@ async def get_account(
     return AccountRead.model_validate(await svc.get(account_id))
 
 
-@router.patch("/{account_id}", response_model=AccountRead, summary="Update account metadata")
+@router.patch(
+    "/{account_id}", response_model=AccountRead, summary="Update account metadata"
+)
 async def update_account(
     account_id: uuid.UUID,
     payload: AccountUpdate,

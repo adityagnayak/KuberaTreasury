@@ -1,4 +1,5 @@
 """Phase 3 treasury and AI forecasting endpoints."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter
@@ -32,56 +33,106 @@ router = APIRouter(prefix="/treasury", tags=["Treasury"])
 _svc = TreasuryService()
 
 
-@router.post("/position", response_model=ConsolidatedPosition, summary="Consolidated cash position")
+@router.post(
+    "/position",
+    response_model=ConsolidatedPosition,
+    summary="Consolidated cash position",
+)
 async def consolidated_position(payload: PositionRequest) -> ConsolidatedPosition:
     return _svc.consolidated_position(payload)
 
 
-@router.post("/position/sweep-simulation", response_model=SweepSimulationResponse, summary="Intraday sweep simulation")
+@router.post(
+    "/position/sweep-simulation",
+    response_model=SweepSimulationResponse,
+    summary="Intraday sweep simulation",
+)
 async def sweep_simulation(payload: SweepSimulationRequest) -> SweepSimulationResponse:
     return _svc.simulate_intraday_sweep(payload)
 
 
-@router.post("/liquidity", response_model=LiquidityResponse, summary="Available liquidity and alert engine")
+@router.post(
+    "/liquidity",
+    response_model=LiquidityResponse,
+    summary="Available liquidity and alert engine",
+)
 async def liquidity(payload: LiquidityRequest) -> LiquidityResponse:
     return _svc.available_liquidity_and_alerts(payload)
 
 
-@router.post("/hmrc/obligations", response_model=list[HmrcObligation], summary="Populate HMRC obligations")
+@router.post(
+    "/hmrc/obligations",
+    response_model=list[HmrcObligation],
+    summary="Populate HMRC obligations",
+)
 async def hmrc_obligations(payload: HmrcScheduleRequest) -> list[HmrcObligation]:
     return _svc.populate_hmrc_obligations(payload)
 
 
-@router.post("/ai/forecast", response_model=ForecastInferenceResponse, summary="Run AI forecast validation pipeline")
+@router.post(
+    "/ai/forecast",
+    response_model=ForecastInferenceResponse,
+    summary="Run AI forecast validation pipeline",
+)
 async def ai_forecast(payload: ForecastInferenceRequest) -> ForecastInferenceResponse:
     return _svc.process_ai_forecast(payload)
 
 
-@router.post("/reports/daily-variance", response_model=DailyVarianceReport, summary="Daily variance report")
+@router.post(
+    "/reports/daily-variance",
+    response_model=DailyVarianceReport,
+    summary="Daily variance report",
+)
 async def daily_variance(payload: DailyVarianceRequest) -> DailyVarianceReport:
     return _svc.daily_variance_report(payload)
 
 
-@router.post("/reports/daily-variance/export", response_model=ReportExportResponse, summary="Daily variance PDF + Excel export")
-async def export_daily_variance(payload: DailyVarianceExportRequest) -> ReportExportResponse:
+@router.post(
+    "/reports/daily-variance/export",
+    response_model=ReportExportResponse,
+    summary="Daily variance PDF + Excel export",
+)
+async def export_daily_variance(
+    payload: DailyVarianceExportRequest,
+) -> ReportExportResponse:
     return _svc.export_daily_variance_report(payload)
 
 
-@router.post("/reports/weekly-summary", response_model=WeeklySummaryReport, summary="Weekly treasury summary")
+@router.post(
+    "/reports/weekly-summary",
+    response_model=WeeklySummaryReport,
+    summary="Weekly treasury summary",
+)
 async def weekly_summary(payload: WeeklySummaryRequest) -> WeeklySummaryReport:
     return _svc.weekly_summary_report(payload)
 
 
-@router.post("/reports/weekly-summary/export", response_model=ReportExportResponse, summary="Weekly summary PDF + Excel export")
-async def export_weekly_summary(payload: WeeklySummaryExportRequest) -> ReportExportResponse:
+@router.post(
+    "/reports/weekly-summary/export",
+    response_model=ReportExportResponse,
+    summary="Weekly summary PDF + Excel export",
+)
+async def export_weekly_summary(
+    payload: WeeklySummaryExportRequest,
+) -> ReportExportResponse:
     return _svc.export_weekly_summary_report(payload)
 
 
-@router.post("/reports/monthly-board-pack", response_model=BoardPackResponse, summary="Monthly board pack export")
+@router.post(
+    "/reports/monthly-board-pack",
+    response_model=BoardPackResponse,
+    summary="Monthly board pack export",
+)
 async def monthly_board_pack(payload: BoardPackRequest) -> BoardPackResponse:
     return _svc.monthly_board_pack(payload)
 
 
-@router.get("/reports/audit-history", response_model=list[ReportAuditEvent], summary="Report generation audit history")
-async def report_audit_history(limit: int = Query(default=100, ge=1, le=500)) -> list[ReportAuditEvent]:
+@router.get(
+    "/reports/audit-history",
+    response_model=list[ReportAuditEvent],
+    summary="Report generation audit history",
+)
+async def report_audit_history(
+    limit: int = Query(default=100, ge=1, le=500)
+) -> list[ReportAuditEvent]:
     return _svc.report_audit_history(limit=limit)

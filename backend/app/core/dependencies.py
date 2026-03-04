@@ -1,4 +1,5 @@
 """FastAPI dependency injectors — auth, tenant, session."""
+
 from __future__ import annotations
 
 import uuid
@@ -12,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 
-
 # ---------------------------------------------------------------------------
 # Database session
 # ---------------------------------------------------------------------------
@@ -23,7 +23,9 @@ DBSession = Annotated[AsyncSession, Depends(get_db)]
 # Current user / tenant extraction from JWT
 # ---------------------------------------------------------------------------
 class CurrentUser:
-    def __init__(self, user_id: uuid.UUID, tenant_id: uuid.UUID, roles: list[str]) -> None:
+    def __init__(
+        self, user_id: uuid.UUID, tenant_id: uuid.UUID, roles: list[str]
+    ) -> None:
         self.user_id = user_id
         self.tenant_id = tenant_id
         self.roles = roles
@@ -41,7 +43,9 @@ async def get_current_user(
         raise credentials_exc
     token = authorization.removeprefix("Bearer ")
     try:
-        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        payload = jwt.decode(
+            token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
+        )
         user_id: str | None = payload.get("sub")
         tenant_id: str | None = payload.get("tenant_id")
         roles: list[str] = payload.get("roles", [])

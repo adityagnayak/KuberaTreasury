@@ -4,6 +4,7 @@ Uses an in-memory SQLite database (via aiosqlite) so tests require no running
 PostgreSQL instance.  PostgreSQL-specific DDL (triggers, enums) is bypassed
 by using SQLAlchemy's ``create_all`` against a clean SQLite engine.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -41,11 +42,15 @@ async def _init_engine():
 
         @event.listens_for(_engine.sync_engine, "connect")
         def _sqlite_functions(dbapi_conn, _record):
-            dbapi_conn.create_function("now", 0, lambda: datetime.utcnow().isoformat(sep=" "))
+            dbapi_conn.create_function(
+                "now", 0, lambda: datetime.utcnow().isoformat(sep=" ")
+            )
 
         async with _engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        _session_factory = async_sessionmaker(_engine, expire_on_commit=False, class_=AsyncSession)
+        _session_factory = async_sessionmaker(
+            _engine, expire_on_commit=False, class_=AsyncSession
+        )
     return _engine, _session_factory
 
 
@@ -59,6 +64,7 @@ async def db() -> AsyncIterator[AsyncSession]:
 
 
 # ─────────────────────────────────────────────────── Domain fixtures ───────────
+
 
 @pytest.fixture
 def tenant_id() -> uuid.UUID:
@@ -130,4 +136,3 @@ async def open_period(db: AsyncSession, tenant_id: uuid.UUID) -> AccountingPerio
     db.add(p)
     await db.flush()
     return p
-

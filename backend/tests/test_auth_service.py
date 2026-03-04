@@ -28,7 +28,11 @@ async def test_login_success_creates_session(db, tenant):
 
     token, refresh, meta = await svc.login(
         db,
-        LoginRequest(tenant_id=tenant.tenant_id, email="cfo@example.com", password="Passw0rd!Strong"),
+        LoginRequest(
+            tenant_id=tenant.tenant_id,
+            email="cfo@example.com",
+            password="Passw0rd!Strong",
+        ),
         "127.0.0.1",
         "pytest",
     )
@@ -55,7 +59,9 @@ async def test_password_change_rejects_weak(db, tenant):
             db,
             tenant.tenant_id,
             user.user_id,
-            ChangePasswordRequest(current_password="Passw0rd!Strong", new_password="weakpass"),
+            ChangePasswordRequest(
+                current_password="Passw0rd!Strong", new_password="weakpass"
+            ),
         )
 
 
@@ -73,7 +79,15 @@ async def test_mfa_setup_generates_backup_codes(db, tenant):
     setup = await svc.setup_mfa(db, tenant.tenant_id, user.user_id, user.username)
     await db.flush()
 
-    rows = (await db.execute(select(MfaBackupCode).where(MfaBackupCode.user_id == user.user_id))).scalars().all()
+    rows = (
+        (
+            await db.execute(
+                select(MfaBackupCode).where(MfaBackupCode.user_id == user.user_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
     assert setup.otpauth_uri.startswith("otpauth://")
     assert len(setup.backup_codes) == 10
     assert len(rows) == 10
@@ -85,7 +99,7 @@ async def test_personal_data_erasure(db, tenant):
     db.add(
         PersonalDataRecord(
             tenant_id=tenant.tenant_id,
-            subject_type=f"user:{user_id}",
+            user_id=user_id,
             full_name="A User",
             email="a@example.com",
         )
@@ -96,12 +110,15 @@ async def test_personal_data_erasure(db, tenant):
     result = await svc.erase_personal_data(db, tenant.tenant_id, user_id, uuid.uuid4())
     await db.flush()
 
-    assert result.anonymised_count == 1
+    assert result.erased is True
+    assert result.erased_at is not None
 
 
 @pytest.mark.asyncio
 async def test_ip_allowlist_enforced(db, tenant):
-    db.add(TenantSecuritySetting(tenant_id=tenant.tenant_id, ip_allowlist_enforced=True))
+    db.add(
+        TenantSecuritySetting(tenant_id=tenant.tenant_id, ip_allowlist_enforced=True)
+    )
     db.add(IpAllowlistEntry(tenant_id=tenant.tenant_id, cidr="10.10.0.0/16"))
     await db.flush()
 

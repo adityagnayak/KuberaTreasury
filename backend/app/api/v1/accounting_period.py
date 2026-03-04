@@ -1,4 +1,5 @@
 """Accounting Period — FastAPI v1 router."""
+
 from __future__ import annotations
 
 import uuid
@@ -43,7 +44,9 @@ async def create_period(
     return AccountingPeriodRead.model_validate(period)
 
 
-@router.get("/", response_model=list[AccountingPeriodRead], summary="List accounting periods")
+@router.get(
+    "/", response_model=list[AccountingPeriodRead], summary="List accounting periods"
+)
 async def list_periods(
     svc: Annotated[AccountingPeriodService, Depends(_svc)],
     status: str | None = Query(default=None),
@@ -52,7 +55,9 @@ async def list_periods(
     return [AccountingPeriodRead.model_validate(p) for p in periods]
 
 
-@router.get("/{period_id}", response_model=AccountingPeriodRead, summary="Get accounting period")
+@router.get(
+    "/{period_id}", response_model=AccountingPeriodRead, summary="Get accounting period"
+)
 async def get_period(
     period_id: uuid.UUID,
     svc: Annotated[AccountingPeriodService, Depends(_svc)],
@@ -96,7 +101,9 @@ async def reopen_period(
     request: ReopenRequest,
     svc: Annotated[AccountingPeriodService, Depends(_svc)],
 ) -> AccountingPeriodRead:
-    return AccountingPeriodRead.model_validate(await svc.reopen_period(period_id, request))
+    return AccountingPeriodRead.model_validate(
+        await svc.reopen_period(period_id, request)
+    )
 
 
 @router.post(

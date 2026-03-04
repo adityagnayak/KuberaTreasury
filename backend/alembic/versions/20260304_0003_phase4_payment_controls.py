@@ -4,6 +4,7 @@ Revision ID: 20260304_0003
 Revises: 20260304_0002
 Create Date: 2026-03-04
 """
+
 from __future__ import annotations
 
 from alembic import op
@@ -22,14 +23,12 @@ def upgrade() -> None:
         sa.Column("initiator_user_id", postgresql.UUID(as_uuid=True), nullable=True),
     )
 
-    op.execute(
-        """
+    op.execute("""
         UPDATE payment_approvals pa
         SET initiator_user_id = pi.created_by_user_id
         FROM payment_instructions pi
         WHERE pa.payment_instruction_id = pi.payment_instruction_id
-        """
-    )
+        """)
 
     op.alter_column("payment_approvals", "initiator_user_id", nullable=False)
 
@@ -41,5 +40,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint("ck_payment_approvals_initiator_not_approver", "payment_approvals", type_="check")
+    op.drop_constraint(
+        "ck_payment_approvals_initiator_not_approver",
+        "payment_approvals",
+        type_="check",
+    )
     op.drop_column("payment_approvals", "initiator_user_id")

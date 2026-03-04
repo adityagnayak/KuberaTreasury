@@ -14,7 +14,15 @@ MODEL = "claude-sonnet-4-6"
 async def run(db: AsyncSession, tenant_id: uuid.UUID, as_of: date) -> dict:
     execution_id = new_execution_id()
     for tool in ["get_hmrc_obligations", "get_cash_forecast", "get_payment_history"]:
-        await log_tool_call(db, execution_id, tenant_id, AGENT_NAME, tool, {"as_of": str(as_of)}, {"status": "ok"})
+        await log_tool_call(
+            db,
+            execution_id,
+            tenant_id,
+            AGENT_NAME,
+            tool,
+            {"as_of": str(as_of)},
+            {"status": "ok"},
+        )
 
     return {
         "execution_id": execution_id,

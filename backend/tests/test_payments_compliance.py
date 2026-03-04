@@ -59,16 +59,26 @@ def test_approval_matrix_defaults_and_currency_urgent_rules() -> None:
 def test_hmrc_reference_formats_enforced() -> None:
     svc = PaymentsComplianceService()
     with pytest.raises(ValueError):
-        svc.initiate_payment(_payment_payload(hmrc_tax_type="CT", hmrc_payment_reference="123"))
+        svc.initiate_payment(
+            _payment_payload(hmrc_tax_type="CT", hmrc_payment_reference="123")
+        )
 
-    out = svc.initiate_payment(_payment_payload(hmrc_tax_type="CT", hmrc_payment_reference="1234567890A001"))
+    out = svc.initiate_payment(
+        _payment_payload(hmrc_tax_type="CT", hmrc_payment_reference="1234567890A001")
+    )
     assert out.status == "PENDING_APPROVAL"
 
 
 def test_funds_check_and_duplicate_detection() -> None:
     svc = PaymentsComplianceService()
     with pytest.raises(ValueError):
-        svc.initiate_payment(_payment_payload(available_balance=Decimal("100"), overdraft_limit=Decimal("0"), min_buffer=Decimal("50")))
+        svc.initiate_payment(
+            _payment_payload(
+                available_balance=Decimal("100"),
+                overdraft_limit=Decimal("0"),
+                min_buffer=Decimal("50"),
+            )
+        )
 
     p1 = _payment_payload()
     out1 = svc.initiate_payment(p1)
@@ -190,7 +200,9 @@ def test_mlro_clear_and_report_paths() -> None:
             destination_country_code="IR",
         )
     )
-    cleared = svc.mlro_decision(out.payment_id, mlro_user_id=uuid.uuid4(), decision="CLEAR")
+    cleared = svc.mlro_decision(
+        out.payment_id, mlro_user_id=uuid.uuid4(), decision="CLEAR"
+    )
     assert cleared.under_review is False
 
     out2 = svc.initiate_payment(
@@ -201,7 +213,9 @@ def test_mlro_clear_and_report_paths() -> None:
             destination_country_code="IR",
         )
     )
-    reported = svc.mlro_decision(out2.payment_id, mlro_user_id=uuid.uuid4(), decision="REPORT")
+    reported = svc.mlro_decision(
+        out2.payment_id, mlro_user_id=uuid.uuid4(), decision="REPORT"
+    )
     assert reported.under_review is True
 
 
@@ -213,9 +227,21 @@ def test_hmrc_vat_return_builder() -> None:
             user_id=uuid.uuid4(),
             period_key="24A1",
             rows=[
-                {"vat_treatment": "T1", "net_amount": Decimal("1000"), "vat_amount": Decimal("200")},
-                {"vat_treatment": "T0", "net_amount": Decimal("500"), "vat_amount": Decimal("0")},
-                {"vat_treatment": "T1", "net_amount": Decimal("-200"), "vat_amount": Decimal("-40")},
+                {
+                    "vat_treatment": "T1",
+                    "net_amount": Decimal("1000"),
+                    "vat_amount": Decimal("200"),
+                },
+                {
+                    "vat_treatment": "T0",
+                    "net_amount": Decimal("500"),
+                    "vat_amount": Decimal("0"),
+                },
+                {
+                    "vat_treatment": "T1",
+                    "net_amount": Decimal("-200"),
+                    "vat_amount": Decimal("-40"),
+                },
             ],
         )
     )
@@ -310,7 +336,9 @@ def test_payments_api_smoke() -> None:
             "beneficiary_name": "Acme Supplies Ltd",
             "amount": "5000",
             "currency_code": "GBP",
-            "scheduled_for": (datetime.now(tz=timezone.utc) + timedelta(hours=1)).isoformat(),
+            "scheduled_for": (
+                datetime.now(tz=timezone.utc) + timedelta(hours=1)
+            ).isoformat(),
             "urgent": False,
             "same_day": False,
             "available_balance": "100000",

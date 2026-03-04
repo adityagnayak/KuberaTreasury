@@ -22,8 +22,20 @@ async def run(db: AsyncSession, tenant_id: uuid.UUID, cutoff_label: str) -> dict
     ]
     actions: list[dict] = []
     for tool_name in tools:
-        result = {"status": "ok", "prepared_only": True, "timestamp": datetime.utcnow().isoformat()}
-        await log_tool_call(db, execution_id, tenant_id, AGENT_NAME, tool_name, {"cutoff": cutoff_label}, result)
+        result = {
+            "status": "ok",
+            "prepared_only": True,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        await log_tool_call(
+            db,
+            execution_id,
+            tenant_id,
+            AGENT_NAME,
+            tool_name,
+            {"cutoff": cutoff_label},
+            result,
+        )
         actions.append({"tool": tool_name, **result})
 
     return {

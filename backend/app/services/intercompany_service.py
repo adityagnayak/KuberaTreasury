@@ -11,6 +11,7 @@ Satisfies:
 - CIR filing: restricted amount written to corporate_interest_restrictions table;
   disallowed interest treated as CT adjustment (account 3500 / 7300).
 """
+
 from __future__ import annotations
 
 import uuid
@@ -26,8 +27,8 @@ from app.core.config import settings
 from app.core.exceptions import NotFoundError, TransferPricingError
 from app.models import CorporateInterestRestriction, IntercompanyTransaction
 
-
 # ─────────────────────────────────────────────────── Pydantic schemas ──────────
+
 
 class IntercompanyTransactionCreate(BaseModel):
     counterparty_entity_name: str = Field(..., min_length=1, max_length=255)
@@ -93,6 +94,7 @@ class CirSummary(BaseModel):
 
 # ─────────────────────────────────────────────────── Service ───────────────────
 
+
 class IntercompanyService:
     """Intercompany elimination and corporate interest restriction engine."""
 
@@ -113,7 +115,8 @@ class IntercompanyService:
     # ──────────────────────────────────────── transaction CRUD ─────────────────
 
     async def create_transaction(
-        self, payload: IntercompanyTransactionCreate,
+        self,
+        payload: IntercompanyTransactionCreate,
     ) -> IntercompanyTransaction:
         """Record an intercompany transaction with optional TP rate validation."""
         rate_variance: Decimal | None = None
@@ -151,14 +154,18 @@ class IntercompanyService:
         await self._db.flush()
         return tx
 
-    async def match_transaction(self, transaction_id: uuid.UUID) -> IntercompanyTransaction:
+    async def match_transaction(
+        self, transaction_id: uuid.UUID
+    ) -> IntercompanyTransaction:
         tx = await self._get_tx(transaction_id)
         tx.is_matched = True
         tx.matched_at = date.today()
         await self._db.flush()
         return tx
 
-    async def get_transaction(self, transaction_id: uuid.UUID) -> IntercompanyTransaction:
+    async def get_transaction(
+        self, transaction_id: uuid.UUID
+    ) -> IntercompanyTransaction:
         return await self._get_tx(transaction_id)
 
     async def list_transactions(
@@ -170,10 +177,14 @@ class IntercompanyService:
             IntercompanyTransaction.tenant_id == self._tenant_id
         )
         if transaction_type:
-            stmt = stmt.where(IntercompanyTransaction.transaction_type == transaction_type)
+            stmt = stmt.where(
+                IntercompanyTransaction.transaction_type == transaction_type
+            )
         if matched is not None:
             stmt = stmt.where(IntercompanyTransaction.is_matched.is_(matched))
-        result = await self._db.scalars(stmt.order_by(IntercompanyTransaction.transaction_date))
+        result = await self._db.scalars(
+            stmt.order_by(IntercompanyTransaction.transaction_date)
+        )
         return list(result.all())
 
     # ──────────────────────────────────────── ageing report ────────────────────

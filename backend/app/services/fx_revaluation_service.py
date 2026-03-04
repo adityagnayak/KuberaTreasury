@@ -9,6 +9,7 @@ Satisfies:
 - Revaluation report: before/after position with gain/loss per currency and entity.
 - Immutability: revaluation journal is posted immediately; cannot be edited.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -31,8 +32,8 @@ from app.models import (
 )
 from app.services.ledger_service import JournalCreate, JournalLineCreate, LedgerService
 
-
 # ─────────────────────────────────────────────────── Pydantic schemas ──────────
+
 
 class HmrcRateIngest(BaseModel):
     base_currency: str
@@ -45,9 +46,9 @@ class HmrcRateIngest(BaseModel):
 class RevaluationRequest(BaseModel):
     period_id: uuid.UUID
     period_end: date
-    fx_reserve_account_id: uuid.UUID    # 3300 – FX Revaluation Reserve
-    fx_gain_account_id: uuid.UUID       # 4110 – FX Gains
-    fx_loss_account_id: uuid.UUID       # 7001 – FX Losses
+    fx_reserve_account_id: uuid.UUID  # 3300 – FX Revaluation Reserve
+    fx_gain_account_id: uuid.UUID  # 4110 – FX Gains
+    fx_loss_account_id: uuid.UUID  # 7001 – FX Losses
     journal_reference: str
 
 
@@ -81,6 +82,7 @@ class HmrcRateRead(BaseModel):
 
 
 # ─────────────────────────────────────────────────── Service ───────────────────
+
 
 class FxRevaluationService:
     """Currency revaluation using HMRC-published period-end exchange rates only.
@@ -135,7 +137,9 @@ class FxRevaluationService:
         await self._db.flush()
         return created
 
-    async def fetch_and_ingest_hmrc_rates(self, period_end: date) -> list[HmrcExchangeRate]:
+    async def fetch_and_ingest_hmrc_rates(
+        self, period_end: date
+    ) -> list[HmrcExchangeRate]:
         """Fetch HMRC monthly exchange rates from the Trade Tariff API and persist them.
 
         Note: The HMRC monthly rates endpoint returns GBP-based rates (1 GBP = X foreign).
@@ -182,7 +186,9 @@ class FxRevaluationService:
 
     # ──────────────────────────────────────── revaluation engine ───────────────
 
-    async def revalue_period_end(self, request: RevaluationRequest) -> RevaluationReport:
+    async def revalue_period_end(
+        self, request: RevaluationRequest
+    ) -> RevaluationReport:
         """Revalue all foreign currency accounts and post the net gain/loss journal."""
         # Fetch all FC accounts for this tenant that allow revaluation
         fc_accounts_result = await self._db.scalars(
@@ -202,12 +208,14 @@ class FxRevaluationService:
 
         for acct in fc_accounts:
             rate_row = await self._db.scalar(
-                select(HmrcExchangeRate).where(
+                select(HmrcExchangeRate)
+                .where(
                     HmrcExchangeRate.tenant_id == self._tenant_id,
                     HmrcExchangeRate.base_currency == acct.currency_code,
                     HmrcExchangeRate.quote_currency == "GBP",
                     HmrcExchangeRate.published_date <= request.period_end,
-                ).order_by(HmrcExchangeRate.published_date.desc())
+                )
+                .order_by(HmrcExchangeRate.published_date.desc())
             )
             if not rate_row:
                 continue
@@ -216,11 +224,13 @@ class FxRevaluationService:
             # For this service we accept the existing balance from the revaluation table
             # or derive from journal lines; here we query existing revaluation record
             prev = await self._db.scalar(
-                select(CurrencyRevaluation).where(
+                select(CurrencyRevaluation)
+                .where(
                     CurrencyRevaluation.tenant_id == self._tenant_id,
                     CurrencyRevaluation.account_id == acct.account_id,
                     CurrencyRevaluation.period_end < request.period_end,
-                ).order_by(CurrencyRevaluation.period_end.desc())
+                )
+                .order_by(CurrencyRevaluation.period_end.desc())
             )
             # book_value is the GBP-equivalent carried balance
             book_value = prev.revalued_value if prev else Decimal("0")
@@ -315,7 +325,9 @@ class FxRevaluationService:
         journal_id = uuid.UUID(int=0)
         if journal_lines_dr:
             all_lines = journal_lines_dr + journal_lines_cr
-            ledger_svc = LedgerService(self._db, self._tenant_id, self._user_id, self._user_ip)
+            ledger_svc = LedgerService(
+                self._db, self._tenant_id, self._user_id, self._user_ip
+            )
             jnl = await ledger_svc.create_journal(
                 JournalCreate(
                     period_id=request.period_id,
@@ -353,5 +365,7 @@ class FxRevaluationService:
                 (HmrcExchangeRate.base_currency == currency_code)
                 | (HmrcExchangeRate.quote_currency == currency_code)
             )
-        result = await self._db.scalars(stmt.order_by(HmrcExchangeRate.published_date.desc()))
+        result = await self._db.scalars(
+            stmt.order_by(HmrcExchangeRate.published_date.desc())
+        )
         return list(result.all())

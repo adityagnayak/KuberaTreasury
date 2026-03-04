@@ -1,4 +1,5 @@
 """Hedge Accounting — FastAPI v1 router (IFRS 9)."""
+
 from __future__ import annotations
 
 import uuid
@@ -37,7 +38,9 @@ async def designate_hedge(
     return HedgeDesignationRead.model_validate(await svc.designate(payload))
 
 
-@router.get("/", response_model=list[HedgeDesignationRead], summary="List hedge designations")
+@router.get(
+    "/", response_model=list[HedgeDesignationRead], summary="List hedge designations"
+)
 async def list_hedges(
     svc: Annotated[HedgeAccountingService, Depends(_svc)],
     active_only: bool = True,
@@ -46,7 +49,9 @@ async def list_hedges(
     return [HedgeDesignationRead.model_validate(h) for h in hedges]
 
 
-@router.get("/{hedge_id}", response_model=HedgeDesignationRead, summary="Get hedge designation")
+@router.get(
+    "/{hedge_id}", response_model=HedgeDesignationRead, summary="Get hedge designation"
+)
 async def get_hedge(
     hedge_id: uuid.UUID,
     svc: Annotated[HedgeAccountingService, Depends(_svc)],
@@ -110,7 +115,9 @@ async def de_designate(
     payload: DeDesignationUpdate,
     svc: Annotated[HedgeAccountingService, Depends(_svc)],
 ) -> HedgeDesignationRead:
-    return HedgeDesignationRead.model_validate(await svc.de_designate(hedge_id, payload))
+    return HedgeDesignationRead.model_validate(
+        await svc.de_designate(hedge_id, payload)
+    )
 
 
 @router.get(
