@@ -59,3 +59,7 @@ logs/
 
 # UAT temporary signing keys
 tmp/uat-keys/
+
+# UAT bootstrap artifacts
+tmp/uat-seed/
+**/tmp/uat-seed/

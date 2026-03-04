@@ -6,9 +6,9 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from ipaddress import ip_address, ip_network
 
+import bcrypt
 import pyotp
 from jose import jwt
-from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.models import (
     AuthFactor,
     AuthSession,
+    IpAllowlistEntry,
     LoginAttempt,
     MfaBackupCode,
     PasswordHistory,
@@ -27,9 +28,6 @@ from app.models import (
     User,
     UserRole,
 )
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=settings.BCRYPT_ROUNDS)
-
 
 class LoginRequest(BaseModel):
     tenant_id: uuid.UUID
@@ -66,6 +64,16 @@ class AuthService:
 
     def _hash_backup_code(self, code: str) -> str:
         return hashlib.sha256(code.encode("utf-8")).hexdigest()
+
+    def _hash_password(self, password: str) -> str:
+        rounds = min(max(settings.BCRYPT_ROUNDS, 4), 31)
+        return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=rounds)).decode("utf-8")
+
+    def _verify_password(self, password: str, password_hash: str) -> bool:
+        try:
+            return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+        except ValueError:
+            return False
 
     def _create_token(self, claims: dict, expires_delta: timedelta) -> str:
         payload = claims.copy()
@@ -206,7 +214,7 @@ class AuthService:
             )
         ).scalar_one_or_none()
 
-        if user is None or not pwd_context.verify(payload.password, user.password_hash):
+        if user is None or not self._verify_password(payload.password, user.password_hash):
             await self._log_attempt(db, payload.tenant_id, payload.email, False, ip, user_agent, user.user_id if user else None)
             total_failed = await self._count_recent_failed_attempts(
                 db,
@@ -456,7 +464,7 @@ class AuthService:
         if user is None:
             raise ValueError("User not found")
 
-        if not pwd_context.verify(payload.current_password, user.password_hash):
+        if not self._verify_password(payload.current_password, user.password_hash):
             raise ValueError("Current password invalid")
 
         self._verify_password_policy(payload.new_password)
@@ -469,10 +477,10 @@ class AuthService:
                 .limit(12)
             )
         ).scalars().all()
-        if any(pwd_context.verify(payload.new_password, h.password_hash) for h in history_rows):
+        if any(self._verify_password(payload.new_password, h.password_hash) for h in history_rows):
             raise ValueError("Cannot reuse last 12 passwords")
 
-        new_hash = pwd_context.hash(payload.new_password)
+        new_hash = self._hash_password(payload.new_password)
         user.password_hash = new_hash
         db.add(PasswordHistory(tenant_id=tenant_id, user_id=user_id, password_hash=new_hash))
 

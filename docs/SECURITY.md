@@ -1,40 +1,40 @@
-# SECURITY.md
-
-## Security Baseline
-
-- TLS-only transport.
-- Required HTTP headers:
-  - Content-Security-Policy
-  - Strict-Transport-Security
-  - X-Frame-Options: DENY
-  - X-Content-Type-Options: nosniff
-- JWT-based auth with short-lived access tokens and revocable sessions.
-- Password hashing with bcrypt (cost >= 12).
-- TOTP MFA ready from v1 schema.
-- Tenant-level IP allowlisting.
-
-## Dependency and Supply Chain Controls
-
-- CI must fail on unresolved critical vulnerabilities:
-  - `pip-audit` for Python dependencies
-  - `npm audit` for frontend dependencies
-- Lockfiles required in Phase 2 implementation.
-- SBOM generation recommended prior to production.
-
-## Secrets Management Policy
-
-- No secrets in code, repository, or CI logs.
-- Secrets managed via platform secret stores (Railway/Vercel).
-- Rotation interval: every 90 days minimum, immediate on incident.
-- Signing and encryption keys versioned and revocable.
+# SECURITY
 
 ## Vulnerability Disclosure Policy
 
-- Contact: `security@kubera.example`
-- Acknowledge reports within 3 business days.
-- Provide remediation timeline based on severity:
-  - Critical: mitigation within 24–72h
-  - High: mitigation within 7 days
-  - Medium: mitigation within 30 days
-  - Low: backlog and track
-- Safe harbor for good-faith researchers performing non-destructive testing.
+- Report vulnerabilities to: security@kubera.example
+- Include: reproduction steps, impacted endpoint/module, severity estimate
+- SLA:
+  - Critical: acknowledge within 1 business day, mitigate within 72h
+  - High: acknowledge within 2 business days, mitigate within 7 days
+  - Medium/Low: triaged into release cycle
+- Good-faith research safe harbor applies for non-destructive testing.
+
+## Supported Versions
+
+- `main` (latest): fully supported
+- Prior tags: security fixes best-effort only
+
+## Cyber Essentials Plus Controls Summary
+
+1. Firewalls / boundary controls
+   - Enforced through Railway/Vercel managed ingress and service isolation.
+2. Secure configuration
+   - Strict security headers in backend middleware.
+3. Access control
+   - JWT + bcrypt + TOTP + role-aware MFA enforcement.
+4. Malware protection
+   - Managed runtime baseline plus dependency audit gates.
+5. Patch management
+   - CI dependency vulnerability scans (`pip-audit`, `npm audit`).
+
+## Secrets Rotation Policy
+
+- Rotate all runtime secrets every 90 days or immediately on compromise.
+- Never store secrets in source control.
+- Use platform secret manager for:
+  - `JWT_SECRET_KEY`
+  - `MFA_TOTP_ENCRYPTION_KEY`
+  - `HMRC_TOKEN_ENCRYPTION_KEY`
+  - API keys (Anthropic, Gemini)
+- Rotation must include restart/rollout and post-rotation auth validation.

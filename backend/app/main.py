@@ -6,6 +6,8 @@ HTTP status code and RFC 7807-style JSON body.
 """
 from __future__ import annotations
 
+import uuid
+
 from fastapi import FastAPI, Request
 from jose import JWTError, jwt
 from fastapi.middleware.cors import CORSMiddleware
@@ -64,7 +66,7 @@ class TenantIsolationMiddleware(BaseHTTPMiddleware):
                 if payload.get("type") == "access" and tenant_id and user_id:
                     request.state.tenant_id = tenant_id
                     request.state.user_id = user_id
-                    ctx_token = set_tenant_context(__import__("uuid").UUID(tenant_id))
+                    ctx_token = set_tenant_context(uuid.UUID(tenant_id))
             except (JWTError, ValueError):
                 pass
 
@@ -88,7 +90,7 @@ class IpAllowlistMiddleware(BaseHTTPMiddleware):
         session_factory = _get_session_factory()
         async with session_factory() as session:
             client_ip = request.client.host if request.client else "127.0.0.1"
-            allowed = await svc.is_ip_allowed(session, __import__("uuid").UUID(tenant_id), client_ip)
+            allowed = await svc.is_ip_allowed(session, uuid.UUID(tenant_id), client_ip)
             if not allowed:
                 return JSONResponse(status_code=403, content={"detail": "Forbidden"})
         return await call_next(request)

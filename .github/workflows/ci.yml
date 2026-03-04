@@ -1,0 +1,239 @@
+name: CI-CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy_production:
+        description: "Deploy production after successful checks"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: kubera-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+jobs:
+  backend-quality:
+    name: Backend Quality Gates
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Ruff lint
+        run: ruff check app tests
+
+      - name: Mypy strict
+        run: mypy app --strict
+
+      - name: Pytest with coverage gate
+        run: pytest --cov=app --cov-report=xml --cov-report=term-missing --cov-fail-under=80
+
+      - name: Cross-tenant isolation test
+        run: pytest tests/test_cross_tenant_isolation.py -q
+
+      - name: Upload backend coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage.xml
+          if-no-files-found: error
+
+  frontend-quality:
+    name: Frontend Quality Gates
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload frontend dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          if-no-files-found: error
+
+  security-gates:
+    name: Security Gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install backend dependencies + pip-audit
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+          pip install pip-audit
+
+      - name: Python dependency vulnerability scan
+        working-directory: backend
+        run: pip-audit
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Frontend dependency vulnerability scan
+        working-directory: frontend
+        run: |
+          npm install
+          npm audit --audit-level=high
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-staging:
+    name: Deploy Staging
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [backend-quality, frontend-quality, security-gates]
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node (CLI tools)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Railway + Vercel CLI
+        run: npm install -g @railway/cli vercel
+
+      - name: Verify deployment secrets
+        shell: bash
+        run: |
+          test -n "${{ secrets.RAILWAY_TOKEN }}"
+          test -n "${{ secrets.RAILWAY_PROJECT_ID }}"
+          test -n "${{ secrets.RAILWAY_STAGING_ENVIRONMENT_ID }}"
+          test -n "${{ secrets.VERCEL_TOKEN }}"
+          test -n "${{ secrets.VERCEL_ORG_ID }}"
+          test -n "${{ secrets.VERCEL_PROJECT_ID }}"
+
+      - name: Deploy backend to Railway staging
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway link --project ${{ secrets.RAILWAY_PROJECT_ID }} --environment ${{ secrets.RAILWAY_STAGING_ENVIRONMENT_ID }}
+          railway up --service api --detach
+          railway up --service worker --detach
+
+      - name: Deploy frontend to Vercel preview (staging)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          cd frontend
+          vercel pull --yes --environment=preview --token "$VERCEL_TOKEN"
+          vercel build --token "$VERCEL_TOKEN"
+          vercel deploy --prebuilt --token "$VERCEL_TOKEN"
+
+      - name: Staging smoke check (optional)
+        if: ${{ secrets.STAGING_API_HEALTH_URL != '' }}
+        run: curl -f -L --max-time 20 "${{ secrets.STAGING_API_HEALTH_URL }}"
+
+  deploy-production:
+    name: Deploy Production
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_production == true
+    needs: [deploy-staging]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node (CLI tools)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Railway + Vercel CLI
+        run: npm install -g @railway/cli vercel
+
+      - name: Verify production deployment secrets
+        shell: bash
+        run: |
+          test -n "${{ secrets.RAILWAY_TOKEN }}"
+          test -n "${{ secrets.RAILWAY_PROJECT_ID }}"
+          test -n "${{ secrets.RAILWAY_PRODUCTION_ENVIRONMENT_ID }}"
+          test -n "${{ secrets.VERCEL_TOKEN }}"
+          test -n "${{ secrets.VERCEL_ORG_ID }}"
+          test -n "${{ secrets.VERCEL_PROJECT_ID }}"
+
+      - name: Deploy backend to Railway production
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway link --project ${{ secrets.RAILWAY_PROJECT_ID }} --environment ${{ secrets.RAILWAY_PRODUCTION_ENVIRONMENT_ID }}
+          railway up --service api --detach
+          railway up --service worker --detach
+
+      - name: Deploy frontend to Vercel production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          cd frontend
+          vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+          vercel build --prod --token "$VERCEL_TOKEN"
+          vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN"
+
+      - name: Production smoke check (optional)
+        if: ${{ secrets.PRODUCTION_API_HEALTH_URL != '' }}
+        run: curl -f -L --max-time 20 "${{ secrets.PRODUCTION_API_HEALTH_URL }}"

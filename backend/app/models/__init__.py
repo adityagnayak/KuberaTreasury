@@ -614,7 +614,7 @@ class AgentExecutionLog(Base):
     __tablename__ = "agent_execution_log"
 
     agent_execution_log_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
-    execution_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    execution_id: Mapped[str] = mapped_column(String(64), nullable=False)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     agent_name: Mapped[str] = mapped_column(String(80), nullable=False)
     tool_name: Mapped[str] = mapped_column(String(80), nullable=False)
