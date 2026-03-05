@@ -63,3 +63,7 @@ tmp/uat-keys/
 # UAT bootstrap artifacts
 tmp/uat-seed/
 **/tmp/uat-seed/
+
+
+FUNCTIONALITIES_AND_CAPABILITIES.txt
+IMPLEMENTATION_ROADMAP.txt

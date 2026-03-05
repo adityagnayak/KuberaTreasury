@@ -47,6 +47,12 @@ $env:DATABASE_URL = "postgresql+psycopg://postgres:testpass@localhost:55432/kube
 K:/KuberaTreasury/.venv/Scripts/python.exe .\scripts\bootstrap_uat_phase4.py --tenant-id 6dfc32c5-8bef-48bd-9753-c8b8aa2dc676 --include-demo-payloads
 ```
 
+### 4) Local demo login helper (fresh TOTP)
+
+```powershell
+K:/KuberaTreasury/.venv/Scripts/python.exe .\scripts\generate_admin_totp.py --tenant-id 3af68755-f9ff-4d10-b6d0-2a1b414c3ce8 --email admin.loginfix@tester.co.uk
+```
+
 ## API Overview
 
 - Auth: login, refresh, MFA setup/verify, password change, logout-all sessions

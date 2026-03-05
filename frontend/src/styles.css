@@ -20,6 +20,20 @@ body {
   font-size: 1.4rem;
 }
 
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.topbar-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
 .header p {
   margin: 4px 0 16px;
   color: #c8d6e5;
@@ -96,4 +110,71 @@ body {
   border-bottom: 1px solid #1f4266;
   padding: 6px 4px;
   font-size: 0.85rem;
+}
+
+.auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+}
+
+.auth-card {
+  width: 100%;
+}
+
+.auth-card h1 {
+  margin-top: 0;
+  margin-bottom: 6px;
+}
+
+.auth-form {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field span {
+  font-size: 0.85rem;
+  color: #c8d6e5;
+}
+
+.field input {
+  border: 1px solid #1f4266;
+  background: #071a2d;
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.btn {
+  border: 1px solid #2b4f73;
+  background: #14314f;
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: #0f2a45;
+}
+
+.error {
+  color: #ff9a9a;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.api-hint {
+  margin-top: 10px;
 }
