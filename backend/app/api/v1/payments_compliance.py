@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from app.core.dependencies import AuthUser, DBSession
 from app.services.beneficiary_verify import (
@@ -15,20 +17,65 @@ from app.services.payments_compliance_service import (
     ApprovalDecisionIn,
     ApprovalMatrix,
     HmrcMtdService,
+    MandateCheckLog,
     MtdApiAudit,
     MtdVatReturnBuildRequest,
     MtdVatReturnBuildResponse,
     Pain001BatchRequest,
     Pain001BatchResponse,
+    PaymentApprovalRecord,
     PaymentInstructionIn,
     PaymentInstructionOut,
     PaymentsComplianceService,
     RegulatoryExportBundle,
     RegulatoryExportRequest,
     RegulatoryExportService,
+    RoleName,
     SignatureVerificationRequest,
     SignatureVerificationResponse,
 )
+
+# ── Tipping-off-safe public response schema ────────────────────────────────────
+# POCA 2002 s.333A: the words "SAR", "suspicious", and "money laundering" must
+# never appear in a payments-router response.  Internal investigation fields
+# (frozen, under_review, compliance_alerted, sanctions_match_score) are
+# stripped; a payment under MLRO review is presented as "UNDER_REVIEW".
+
+
+class PaymentPublicOut(BaseModel):
+    """Payments-router response — no internal review state is exposed."""
+
+    payment_id: uuid.UUID
+    tenant_id: uuid.UUID
+    status: str  # "UNDER_REVIEW" when internally frozen/under_review
+    route: Literal["BACS", "CHAPS", "FASTER_PAYMENTS"]
+    enhanced_due_diligence_required: bool
+    required_approver_roles: list[RoleName]
+    approvals: list[PaymentApprovalRecord]
+    duplicate_detected: bool
+    mandate_checks: list[MandateCheckLog]
+    audit_trail: list[dict[str, str]]
+    # Fields intentionally omitted from this schema:
+    #   frozen, under_review, compliance_alerted, sanctions_match_score
+
+
+def _to_public(out: PaymentInstructionOut) -> PaymentPublicOut:
+    """Convert internal response to the tipping-off-safe public schema."""
+    public_status = (
+        "UNDER_REVIEW" if (out.frozen or out.under_review) else out.status
+    )
+    return PaymentPublicOut(
+        payment_id=out.payment_id,
+        tenant_id=out.tenant_id,
+        status=public_status,
+        route=out.route,
+        enhanced_due_diligence_required=out.enhanced_due_diligence_required,
+        required_approver_roles=out.required_approver_roles,
+        approvals=out.approvals,
+        duplicate_detected=out.duplicate_detected,
+        mandate_checks=out.mandate_checks,
+        audit_trail=out.audit_trail,
+    )
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
@@ -51,20 +98,20 @@ async def configure_matrix(
 
 @router.post(
     "/initiate",
-    response_model=PaymentInstructionOut,
+    response_model=PaymentPublicOut,
     summary="Initiate payment with compliance controls",
 )
-async def initiate_payment(payload: PaymentInstructionIn) -> PaymentInstructionOut:
-    return _payments.initiate_payment(payload)
+async def initiate_payment(payload: PaymentInstructionIn) -> PaymentPublicOut:
+    return _to_public(_payments.initiate_payment(payload))
 
 
 @router.post(
     "/approve",
-    response_model=PaymentInstructionOut,
+    response_model=PaymentPublicOut,
     summary="Approve or reject payment",
 )
-async def approve_payment(payload: ApprovalDecisionIn) -> PaymentInstructionOut:
-    return _payments.approve_payment(payload)
+async def approve_payment(payload: ApprovalDecisionIn) -> PaymentPublicOut:
+    return _to_public(_payments.approve_payment(payload))
 
 
 @router.post(
@@ -78,61 +125,26 @@ async def export_pain001(payload: Pain001BatchRequest) -> Pain001BatchResponse:
 
 @router.post(
     "/{payment_id}/confirm",
-    response_model=PaymentInstructionOut,
+    response_model=PaymentPublicOut,
     summary="Mark payment as confirmed",
 )
 async def confirm_payment(
     payment_id: uuid.UUID, actor_user_id: uuid.UUID
-) -> PaymentInstructionOut:
-    return _payments.confirm_payment(payment_id=payment_id, actor_user_id=actor_user_id)
+) -> PaymentPublicOut:
+    return _to_public(_payments.confirm_payment(payment_id=payment_id, actor_user_id=actor_user_id))
 
 
 @router.post(
     "/{payment_id}/reconcile",
-    response_model=PaymentInstructionOut,
+    response_model=PaymentPublicOut,
     summary="Mark payment as reconciled",
 )
 async def reconcile_payment(
     payment_id: uuid.UUID, actor_user_id: uuid.UUID
-) -> PaymentInstructionOut:
-    return _payments.reconcile_payment(
-        payment_id=payment_id, actor_user_id=actor_user_id
+) -> PaymentPublicOut:
+    return _to_public(
+        _payments.reconcile_payment(payment_id=payment_id, actor_user_id=actor_user_id)
     )
-
-
-@router.post(
-    "/{payment_id}/sar/clear",
-    response_model=PaymentInstructionOut,
-    summary="MLRO clears SAR review",
-)
-async def sar_clear(
-    payment_id: uuid.UUID, mlro_user_id: uuid.UUID
-) -> PaymentInstructionOut:
-    return _payments.mlro_decision(
-        payment_id, mlro_user_id=mlro_user_id, decision="CLEAR"
-    )
-
-
-@router.post(
-    "/{payment_id}/sar/report",
-    response_model=PaymentInstructionOut,
-    summary="MLRO files SAR and keeps freeze",
-)
-async def sar_report(
-    payment_id: uuid.UUID, mlro_user_id: uuid.UUID
-) -> PaymentInstructionOut:
-    return _payments.mlro_decision(
-        payment_id, mlro_user_id=mlro_user_id, decision="REPORT"
-    )
-
-
-@router.get(
-    "/{payment_id}/sar/view",
-    response_model=dict[str, str],
-    summary="SAR workspace view",
-)
-async def sar_view(payment_id: uuid.UUID, requester_role: str) -> dict[str, str]:
-    return _payments.sar_case_view(payment_id, requester_role=requester_role)  # type: ignore[arg-type]
 
 
 @router.post("/hmrc/mtd/tokens", summary="Store HMRC OAuth tokens encrypted")

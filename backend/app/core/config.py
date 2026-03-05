@@ -3,19 +3,27 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=("backend/.env", ".env"),
+        extra="ignore",
+    )
 
     # --- App ---
     APP_NAME: str = "KuberaTreasury"
     APP_ENV: str = "development"
     API_VERSION: str = "v1"
     FRONTEND_BASE_URL: str = "http://localhost:5173"
+    ALLOWED_ORIGINS: list[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
 
     # --- DB ---
     DATABASE_URL: str = (
@@ -83,6 +91,25 @@ class Settings(BaseSettings):
     # --- CIR thresholds ---
     CIR_ALERT_THRESHOLD: Decimal = Decimal("1500000.00")
     CIR_HARD_FLAG_THRESHOLD: Decimal = Decimal("2000000.00")
+
+    @field_validator("HMRC_SANDBOX_MODE", "AI_PROVIDER_GEMINI_DEPRECATED", mode="before")
+    @classmethod
+    def strip_inline_comments_for_bools(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.split("#", 1)[0].strip()
+        return v
+
+    @field_validator("ALLOWED_ORIGINS", mode="before")
+    @classmethod
+    def parse_allowed_origins(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            cleaned = v.split("#", 1)[0].strip()
+            if not cleaned:
+                return []
+            if cleaned.startswith("[") and cleaned.endswith("]"):
+                return cleaned
+            return [origin.strip() for origin in cleaned.split(",") if origin.strip()]
+        return v
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod

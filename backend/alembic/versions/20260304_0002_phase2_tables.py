@@ -21,7 +21,7 @@ def upgrade() -> None:
     bind = op.get_bind()
 
     # ---- new enums ----
-    vat_treatment_enum = sa.Enum(
+    vat_treatment_enum = postgresql.ENUM(
         "T0",
         "T1",
         "T2",
@@ -29,8 +29,9 @@ def upgrade() -> None:
         "T7",
         "T9",
         name="vat_treatment_code",
+        create_type=False,
     )
-    account_subtype_enum = sa.Enum(
+    account_subtype_enum = postgresql.ENUM(
         "current_asset",
         "non_current_asset",
         "current_liability",
@@ -52,26 +53,30 @@ def upgrade() -> None:
         "interest_receivable",
         "tax_payable",
         name="account_subtype",
+        create_type=False,
     )
-    period_status_enum = sa.Enum(
+    period_status_enum = postgresql.ENUM(
         "open",
         "soft_closed",
         "hard_closed",
         name="period_status",
+        create_type=False,
     )
-    period_type_enum = sa.Enum(
+    period_type_enum = postgresql.ENUM(
         "monthly",
         "quarterly",
         "annual",
         name="period_type",
+        create_type=False,
     )
-    journal_status_enum = sa.Enum(
+    journal_status_enum = postgresql.ENUM(
         "draft",
         "posted",
         "reversed",
         name="journal_status",
+        create_type=False,
     )
-    journal_type_enum = sa.Enum(
+    journal_type_enum = postgresql.ENUM(
         "manual",
         "auto_vat",
         "auto_reversal",
@@ -80,17 +85,20 @@ def upgrade() -> None:
         "recurring",
         "year_end_rollover",
         name="journal_type",
+        create_type=False,
     )
-    hedge_type_enum = sa.Enum(
+    hedge_type_enum = postgresql.ENUM(
         "fair_value",
         "cash_flow",
         "net_investment",
         name="hedge_type",
+        create_type=False,
     )
-    effectiveness_method_enum = sa.Enum(
+    effectiveness_method_enum = postgresql.ENUM(
         "dollar_offset",
         "regression",
         name="effectiveness_method",
+        create_type=False,
     )
     for e in [
         vat_treatment_enum,
@@ -117,7 +125,7 @@ def upgrade() -> None:
         "chart_of_accounts",
         sa.Column(
             "vat_treatment",
-            sa.Enum(
+            postgresql.ENUM(
                 "T0",
                 "T1",
                 "T2",
@@ -125,7 +133,7 @@ def upgrade() -> None:
                 "T7",
                 "T9",
                 name="vat_treatment_code",
-                create_constraint=False,
+                create_type=False,
             ),
             nullable=True,
         ),
@@ -134,7 +142,7 @@ def upgrade() -> None:
         "chart_of_accounts",
         sa.Column(
             "account_subtype",
-            sa.Enum(name="account_subtype", create_constraint=False),
+            postgresql.ENUM(name="account_subtype", create_type=False),
             nullable=True,
         ),
     )
@@ -187,14 +195,14 @@ def upgrade() -> None:
         sa.Column("period_name", sa.String(40), nullable=False),
         sa.Column(
             "period_type",
-            sa.Enum(name="period_type", create_constraint=False),
+            postgresql.ENUM(name="period_type", create_type=False),
             nullable=False,
         ),
         sa.Column("period_start", sa.Date(), nullable=False),
         sa.Column("period_end", sa.Date(), nullable=False),
         sa.Column(
             "status",
-            sa.Enum(name="period_status", create_constraint=False),
+            postgresql.ENUM(name="period_status", create_type=False),
             nullable=False,
             server_default="open",
         ),
@@ -257,13 +265,13 @@ def upgrade() -> None:
         sa.Column("description", sa.String(255), nullable=True),
         sa.Column(
             "journal_type",
-            sa.Enum(name="journal_type", create_constraint=False),
+            postgresql.ENUM(name="journal_type", create_type=False),
             nullable=False,
             server_default="manual",
         ),
         sa.Column(
             "status",
-            sa.Enum(name="journal_status", create_constraint=False),
+            postgresql.ENUM(name="journal_status", create_type=False),
             nullable=False,
             server_default="draft",
         ),
@@ -341,20 +349,20 @@ def upgrade() -> None:
         sa.Column("description", sa.String(255), nullable=True),
         sa.Column(
             "vat_code",
-            sa.Enum(
+            postgresql.ENUM(
                 "standard",
                 "reduced",
                 "zero",
                 "exempt",
                 "outside_scope",
                 name="vat_code",
-                create_constraint=False,
+                create_type=False,
             ),
             nullable=True,
         ),
         sa.Column(
             "vat_treatment",
-            sa.Enum(
+            postgresql.ENUM(
                 "T0",
                 "T1",
                 "T2",
@@ -362,7 +370,7 @@ def upgrade() -> None:
                 "T7",
                 "T9",
                 name="vat_treatment_code",
-                create_constraint=False,
+                create_type=False,
             ),
             nullable=True,
         ),
@@ -439,7 +447,7 @@ def upgrade() -> None:
         sa.Column("hedge_reference", sa.String(60), nullable=False),
         sa.Column(
             "hedge_type",
-            sa.Enum(name="hedge_type", create_constraint=False),
+            postgresql.ENUM(name="hedge_type", create_type=False),
             nullable=False,
         ),
         sa.Column("hedging_instrument_description", sa.String(500), nullable=False),
@@ -449,7 +457,7 @@ def upgrade() -> None:
         sa.Column("designation_date", sa.Date(), nullable=False),
         sa.Column(
             "prospective_method",
-            sa.Enum(name="effectiveness_method", create_constraint=False),
+            postgresql.ENUM(name="effectiveness_method", create_type=False),
             nullable=False,
         ),
         sa.Column(
@@ -512,7 +520,7 @@ def upgrade() -> None:
         sa.Column("test_type", sa.String(20), nullable=False),
         sa.Column(
             "method",
-            sa.Enum(name="effectiveness_method", create_constraint=False),
+            postgresql.ENUM(name="effectiveness_method", create_type=False),
             nullable=False,
         ),
         sa.Column("instrument_fair_value_change", sa.Numeric(20, 4), nullable=False),

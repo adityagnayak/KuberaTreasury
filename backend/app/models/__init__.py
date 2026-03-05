@@ -28,6 +28,7 @@ from sqlalchemy import (
     Computed,
 )
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ENUM as PGEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -55,7 +56,13 @@ class Tenant(Base):
     accounts_office_reference: Mapped[str | None] = mapped_column(String(13))
     base_currency: Mapped[str] = mapped_column(String(3), server_default="GBP")
     classification_level: Mapped[str] = mapped_column(
-        String(40), server_default="OFFICIAL"
+        PGEnum(
+            "PUBLIC",
+            "OFFICIAL",
+            name="classification_level",
+            create_type=False,
+        ),
+        server_default="OFFICIAL",
     )
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
     created_at: Mapped[datetime] = mapped_column(
@@ -83,10 +90,46 @@ class ChartOfAccount(Base):
     account_code: Mapped[str] = mapped_column(String(30), nullable=False)
     account_name: Mapped[str] = mapped_column(String(255), nullable=False)
     account_type: Mapped[str] = mapped_column(String(40), nullable=False)
-    account_subtype: Mapped[str | None] = mapped_column(String(60))
+    account_subtype: Mapped[str | None] = mapped_column(
+        PGEnum(
+            "current_asset",
+            "non_current_asset",
+            "current_liability",
+            "non_current_liability",
+            "equity",
+            "share_capital",
+            "retained_earnings",
+            "revenue",
+            "cost_of_sales",
+            "operating_expense",
+            "finance_income",
+            "finance_expense",
+            "fx_revaluation_reserve",
+            "hedging_reserve_oci",
+            "intercompany_loan",
+            "cash_pool",
+            "cir_adjustment",
+            "interest_payable",
+            "interest_receivable",
+            "tax_payable",
+            name="account_subtype",
+            create_type=False,
+        )
+    )
     currency_code: Mapped[str] = mapped_column(String(3), nullable=False)
     hmrc_nominal_code: Mapped[str | None] = mapped_column(String(10))
-    vat_treatment: Mapped[str | None] = mapped_column(String(5))  # T0/T1/T2/T4/T7/T9
+    vat_treatment: Mapped[str | None] = mapped_column(
+        PGEnum(
+            "T0",
+            "T1",
+            "T2",
+            "T4",
+            "T7",
+            "T9",
+            name="vat_treatment_code",
+            create_type=False,
+        )
+    )
     is_treasury_account: Mapped[bool] = mapped_column(
         Boolean, server_default=text("false")
     )
@@ -606,7 +649,21 @@ class Role(Base):
         ForeignKey("tenants.tenant_id", ondelete="CASCADE"),
         nullable=False,
     )
-    role_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    role_name: Mapped[str] = mapped_column(
+        PGEnum(
+            "system_admin",
+            "cfo",
+            "head_of_treasury",
+            "treasury_manager",
+            "treasury_analyst",
+            "auditor",
+            "compliance_officer",
+            "board_member",
+            name="role_name",
+            create_type=False,
+        ),
+        nullable=False,
+    )
     description: Mapped[str | None] = mapped_column(String(255))
 
 
@@ -650,7 +707,13 @@ class AuthFactor(Base):
         nullable=False,
     )
     factor_type: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default="totp"
+        PGEnum(
+            "totp",
+            name="auth_factor_type",
+            create_type=False,
+        ),
+        nullable=False,
+        server_default="totp",
     )
     totp_secret_encrypted: Mapped[str | None] = mapped_column(Text)
     is_enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))

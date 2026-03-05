@@ -1,13 +1,15 @@
 """Pytest fixtures shared across the KuberaTreasury test suite.
 
-Uses an in-memory SQLite database (via aiosqlite) so tests require no running
-PostgreSQL instance.  PostgreSQL-specific DDL (triggers, enums) is bypassed
-by using SQLAlchemy's ``create_all`` against a clean SQLite engine.
+Defaults to in-memory SQLite for local runs, but honors ``DATABASE_URL`` when
+provided (e.g. CI PostgreSQL service) so the same suite can run against
+PostgreSQL.
 """
 
 from __future__ import annotations
 
 import asyncio
+import os
+import sys
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
@@ -31,20 +33,31 @@ _engine = None
 _session_factory = None
 
 
+if sys.platform.startswith("win"):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+
 async def _init_engine():
     global _engine, _session_factory
     if _engine is None:
+        database_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+        is_sqlite = database_url.startswith("sqlite+")
+
+        engine_kwargs = {"echo": False}
+        if is_sqlite:
+            engine_kwargs["connect_args"] = {"check_same_thread": False}
+
         _engine = create_async_engine(
-            "sqlite+aiosqlite:///:memory:",
-            echo=False,
-            connect_args={"check_same_thread": False},
+            database_url,
+            **engine_kwargs,
         )
 
-        @event.listens_for(_engine.sync_engine, "connect")
-        def _sqlite_functions(dbapi_conn, _record):
-            dbapi_conn.create_function(
-                "now", 0, lambda: datetime.utcnow().isoformat(sep=" ")
-            )
+        if is_sqlite:
+            @event.listens_for(_engine.sync_engine, "connect")
+            def _sqlite_functions(dbapi_conn, _record):
+                dbapi_conn.create_function(
+                    "now", 0, lambda: datetime.utcnow().isoformat(sep=" ")
+                )
 
         async with _engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -56,11 +69,24 @@ async def _init_engine():
 
 @pytest_asyncio.fixture
 async def db() -> AsyncIterator[AsyncSession]:
-    """Provide a fresh transactional session, rolled back after each test."""
-    eng, factory = await _init_engine()
-    async with factory() as session:
-        yield session
-        await session.rollback()
+    """Provide an isolated transactional session per test.
+
+    A connection-level transaction is always rolled back, so even explicit
+    ``session.commit()`` calls inside tests never leak state to other tests.
+    """
+    eng, _ = await _init_engine()
+    async with eng.connect() as connection:
+        transaction = await connection.begin()
+        session = AsyncSession(
+            bind=connection,
+            expire_on_commit=False,
+            join_transaction_mode="create_savepoint",
+        )
+        try:
+            yield session
+        finally:
+            await session.close()
+            await transaction.rollback()
 
 
 # ─────────────────────────────────────────────────── Domain fixtures ───────────

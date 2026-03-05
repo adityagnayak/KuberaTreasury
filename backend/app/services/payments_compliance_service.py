@@ -878,6 +878,28 @@ class PaymentsComplianceService:
             "flags": "; ".join(f.flag for f in case.flags),
         }
 
+    def sar_queue(self) -> list[SarCase]:
+        """Return all SAR cases currently awaiting MLRO review (UNDER_REVIEW).
+
+        Only the MLRO / compliance_officer should ever receive the output of
+        this method.  No external caller should pass this data to non-MLRO
+        roles.
+        """
+        return [
+            case
+            for case in self._sar_cases.values()
+            if case.status == "UNDER_REVIEW"
+        ]
+
+    def sar_case_by_id(self, sar_case_id: uuid.UUID) -> tuple[SarCase, _StoredPayment] | None:
+        """Look up a SAR case and its associated payment by sar_case_id."""
+        for payment_id, case in self._sar_cases.items():
+            if case.sar_case_id == sar_case_id:
+                payment = self._payments.get(payment_id)
+                if payment:
+                    return case, payment
+        return None
+
     def _to_response(self, payment: _StoredPayment) -> PaymentInstructionOut:
         return PaymentInstructionOut(
             payment_id=payment.payment_id,

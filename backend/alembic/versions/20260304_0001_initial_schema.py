@@ -17,8 +17,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    classification_enum = sa.Enum("PUBLIC", "OFFICIAL", name="classification_level")
-    role_enum = sa.Enum(
+    classification_enum = postgresql.ENUM(
+        "PUBLIC", "OFFICIAL", name="classification_level", create_type=False
+    )
+    role_enum = postgresql.ENUM(
         "system_admin",
         "cfo",
         "head_of_treasury",
@@ -28,30 +30,41 @@ def upgrade() -> None:
         "compliance_officer",
         "board_member",
         name="role_name",
+        create_type=False,
     )
-    permission_effect_enum = sa.Enum("allow", "deny", name="permission_effect")
-    vat_code_enum = sa.Enum(
+    permission_effect_enum = postgresql.ENUM(
+        "allow", "deny", name="permission_effect", create_type=False
+    )
+    vat_code_enum = postgresql.ENUM(
         "standard",
         "reduced",
         "zero",
         "exempt",
         "outside_scope",
         name="vat_code",
+        create_type=False,
     )
-    hmrc_tax_type_enum = sa.Enum("CT", "VAT", "PAYE", "CIS", name="hmrc_tax_type")
-    hmrc_obligation_status_enum = sa.Enum(
-        "open", "fulfilled", "overdue", name="hmrc_obligation_status"
+    hmrc_tax_type_enum = postgresql.ENUM(
+        "CT", "VAT", "PAYE", "CIS", name="hmrc_tax_type", create_type=False
     )
-    payment_status_enum = sa.Enum(
+    hmrc_obligation_status_enum = postgresql.ENUM(
+        "open", "fulfilled", "overdue", name="hmrc_obligation_status", create_type=False
+    )
+    payment_status_enum = postgresql.ENUM(
         "draft",
         "pending_approval",
         "approved",
         "rejected",
         "exported_pain001",
         name="payment_status",
+        create_type=False,
     )
-    payment_channel_enum = sa.Enum("manual_pain001", name="payment_channel")
-    auth_factor_type_enum = sa.Enum("totp", name="auth_factor_type")
+    payment_channel_enum = postgresql.ENUM(
+        "manual_pain001", name="payment_channel", create_type=False
+    )
+    auth_factor_type_enum = postgresql.ENUM(
+        "totp", name="auth_factor_type", create_type=False
+    )
 
     bind = op.get_bind()
     classification_enum.create(bind, checkfirst=True)
@@ -102,10 +115,6 @@ def upgrade() -> None:
         sa.CheckConstraint("char_length(vrn) = 9", name="ck_tenants_vrn_len"),
         sa.CheckConstraint(
             "char_length(accounts_office_reference) = 13", name="ck_tenants_aor_len"
-        ),
-        sa.CheckConstraint(
-            "classification_level <> 'OFFICIAL-SENSITIVE'",
-            name="ck_tenants_no_official_sensitive",
         ),
         sa.UniqueConstraint("tenant_name", name="uq_tenants_name"),
     )
@@ -1166,10 +1175,6 @@ def upgrade() -> None:
             sa.DateTime(timezone=True),
             nullable=False,
             server_default=sa.text("now()"),
-        ),
-        sa.CheckConstraint(
-            "classification_level <> 'OFFICIAL-SENSITIVE'",
-            name="ck_contracts_no_official_sensitive",
         ),
         sa.UniqueConstraint(
             "tenant_id", "contract_reference", name="uq_contract_reference"

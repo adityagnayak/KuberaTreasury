@@ -7,6 +7,8 @@ HTTP status code and RFC 7807-style JSON body.
 
 from __future__ import annotations
 
+import asyncio
+import sys
 import uuid
 
 from fastapi import FastAPI, Request
@@ -31,8 +33,13 @@ from app.api.v1.intercompany import router as ic_router
 from app.api.v1.accounting_period import router as period_router
 from app.api.v1.treasury import router as treasury_router
 from app.api.v1.payments_compliance import router as payments_router
+from app.api.v1.sar import router as sar_router
 from app.core.middleware import SecurityHeadersMiddleware
 from app.services.auth_service import AuthService
+
+
+if sys.platform.startswith("win"):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 class TenantIsolationMiddleware(BaseHTTPMiddleware):
@@ -111,9 +118,9 @@ def create_app() -> FastAPI:
     app.add_middleware(IpAllowlistMiddleware)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=getattr(settings, "ALLOWED_ORIGINS", ["http://localhost:5173"]),
+        allow_origins=settings.ALLOWED_ORIGINS,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     )
 
@@ -142,6 +149,7 @@ def create_app() -> FastAPI:
     app.include_router(period_router, prefix=API_PREFIX)
     app.include_router(treasury_router, prefix=API_PREFIX)
     app.include_router(payments_router, prefix=API_PREFIX)
+    app.include_router(sar_router, prefix=API_PREFIX)
 
     @app.get("/health", tags=["Health"])
     async def health() -> dict:
